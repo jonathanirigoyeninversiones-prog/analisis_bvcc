@@ -8,9 +8,9 @@ from datetime import datetime, date
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Análisis BVC", layout="wide")
+st.set_page_config(page_title="Análisis BVC - Terminal Cuantitativo", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (FANCY UI / UX REDISEÑADO)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (FANCY UI / UX RESPONSIVO)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -39,7 +39,7 @@ st.markdown("""
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
     }
 
-    /* Contenedor fluido sin desbordamientos horizontales y altura dinámica completa */
+    /* Contenedor fluido sin desbordamientos y adaptativo a cualquier pantalla */
     div[data-testid="stDataFrame"] {
         width: 100% !important;
         background: rgba(15, 23, 42, 0.6);
@@ -66,6 +66,8 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 15px;
     }
 
     .main-title {
@@ -482,7 +484,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Altura calculada dinámicamente para desplegar todas las filas sin scroll interno
+                # Altura calculada dinámicamente para desplegar todas las filas completamente vertical sin scroll interno
                 altura_total = (len(df) + 1) * 38 + 15
                 
                 st.dataframe(
