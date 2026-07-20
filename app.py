@@ -532,7 +532,7 @@ if 'ultima_actualizacion' not in st.session_state:
 
 tiempo_transcurrido = datetime.now() - st.session_state['ultima_actualizacion']
 if tiempo_transcurrido.total_seconds() >= 3600:
-    with st.spinner("Actualización automática por tiempo (1 hora)..."):
+    with st.spinner("Analizando..."):
         try:
             subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
             st.session_state['ultima_actualizacion'] = datetime.now()
@@ -645,7 +645,7 @@ if st.session_state.get('analizado', False):
 
             df_display = df_display.rename(columns={
                 'nombre': 'Ticker',
-                'estado_visual': 'Recomendado',
+                'estado_visual': 'Recomendación',
                 'puntaje': 'Puntaje',
                 'precio': 'Precio (Bs)',
                 'precio_usd': 'Precio (USD)',
@@ -653,7 +653,7 @@ if st.session_state.get('analizado', False):
                 'upside': 'Potencial'
             })
             
-            columnas = ['Ticker', 'Recomendado', 'Puntaje', 'Precio (Bs)', 'Precio (USD)', 'Target (Bs)', 'Potencial']
+            columnas = ['Ticker', 'Recomendación', 'Puntaje', 'Precio (Bs)', 'Precio (USD)', 'Target (Bs)', 'Potencial']
             
             st.subheader(f"📊 {titulo} ({len(df)} empresas)")
             
@@ -666,7 +666,7 @@ if st.session_state.get('analizado', False):
                 key=clave_tabla,
                 column_config={
                     "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción", width="medium"),
-                    "Recomendado": st.column_config.TextColumn("Estatus", width="medium"),
+                    "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
                     "Puntaje": st.column_config.ProgressColumn(
                         "Score Cuantitativo",
                         help="Puntaje asignado por el algoritmo",
