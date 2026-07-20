@@ -390,7 +390,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         fecha_limite = pd.to_datetime(fecha_referencia)
         df_filtrado = df[df['Date'] <= fecha_limite]
         
-        # Si la fecha seleccionada es menor a todo el historial, usamos todo el DataFrame para no retornar None
         if df_filtrado.empty:
             df_filtrado = df
 
@@ -539,25 +538,16 @@ fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.
 if 'ultima_actualizacion' not in st.session_state:
     st.session_state['ultima_actualizacion'] = datetime.now() - timedelta(hours=2)
 
-tiempo_transcurrido = datetime.now() - st.session_state['ultima_actualizacion']
-if tiempo_transcurrido.total_seconds() >= 3600:
-    with st.spinner("Analizando..."):
-        try:
-            subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
-            st.session_state['ultima_actualizacion'] = datetime.now()
-        except Exception:
-            pass
-
 st.sidebar.divider()
 if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
-    with st.spinner("Analizando..."):
+    with st.spinner("Descargando datos históricos del mercado..."):
         try:
             subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
             st.session_state['ultima_actualizacion'] = datetime.now()
-            st.sidebar.success("🎉 ¡Historial actualizado!")
+            st.sidebar.success("🎉 ¡Historial actualizado con éxito!")
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Error: {e}")
+            st.sidebar.error(f"Error al actualizar: {e}")
 
 st.sidebar.divider()
 
@@ -586,28 +576,38 @@ with col_dolar:
 
 carpeta = "./datos_bvc"
 
+# Corrección automática: si la carpeta no existe o está vacía, ejecutamos el descargador automáticamente
 if st.session_state['analizado']:
     if not os.path.exists(carpeta):
-        st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC'.")
+        os.makedirs(carpeta, exist_ok=True)
+    
+    archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')] if os.path.exists(carpeta) else []
+    
+    if not archivos:
+        with st.spinner("No se encontraron archivos locales. Descargando datos automáticamente..."):
+            try:
+                subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
+                archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
+            except Exception:
+                pass
+
+    if not archivos:
+        st.warning("⚠️ No se pudieron obtener los archivos CSV. Por favor, haz clic en 'Actualizar Historial BVC' para forzar la descarga de los datos.")
     else:
-        archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
-        if not archivos:
-            st.warning("No hay datos descargados en la carpeta `./datos_bvc`. Presiona 'Actualizar Historial BVC' o asegúrate de que existan archivos CSV.")
+        resultados = []
+        with st.spinner("Analizando mercado y calculando indicadores técnicos..."):
+            emas_tuple = tuple((item['periodo'], item['color']) for item in st.session_state['lista_emas'])
+            for archivo in archivos:
+                res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia, emas_tuple)
+                if res:
+                    resultados.append(res)
+
+        if resultados:
+            st.session_state['resultados'] = resultados
         else:
-            resultados = []
-            with st.spinner("Analizando mercado y calculando indicadores..."):
-                emas_tuple = tuple((item['periodo'], item['color']) for item in st.session_state['lista_emas'])
-                for archivo in archivos:
-                    res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia, emas_tuple)
-                    if res:
-                        resultados.append(res)
+            st.warning("Los archivos existen pero no se pudieron procesar. Revisa el contenido de los CSV.")
 
-            if resultados:
-                st.session_state['resultados'] = resultados
-            else:
-                st.warning("Los archivos CSV existen pero no se pudieron procesar correctamente. Revisa el formato de las columnas ('Date', 'Close', 'High', 'Low', 'Open', 'Volume').")
-
-if st.session_state['analizado'] and st.session_state['resultados']:
+if st.session_state['analizado'] and st.session_state.get('resultados'):
     resultados = st.session_state['resultados']
     df_resultados = pd.DataFrame(resultados)
     
