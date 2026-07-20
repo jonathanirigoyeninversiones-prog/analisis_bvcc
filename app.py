@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (ANCHO TOTAL Y SCROLL VISIBLE)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (ANCHO TOTAL Y VISIBILIDAD DE TABLAS)
 st.markdown("""
 <style>
     .stApp {
@@ -44,7 +44,7 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* Forzar que el dataframe ocupe todo el ancho y permita desplazamiento fluido */
+    /* Forzar que las tablas ocupen todo el ancho sin cortes */
     div[data-testid="stDataFrame"] {
         width: 100% !important;
     }
@@ -507,7 +507,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
                 'precio': 0,
                 'target': 0,
                 'upside': 0,
-                'fecha_ultimo': fecha_referencia.strftime('%Y-%m-%d'),
                 'df_original': df
             }
 
@@ -516,10 +515,8 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         df_con_volumen = df[df['Volume'] > 0] if 'Volume' in df.columns else pd.DataFrame()
         if df_con_volumen.empty:
             ultimo = df.iloc[-1]
-            fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
         else:
             ultimo = df_con_volumen.iloc[-1]
-            fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
 
         df_calculado = calcular_indicadores(df.copy(), st.session_state['lista_emas'])
 
@@ -594,7 +591,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             'precio': float(ultimo_datos['Close']),
             'target': float(target),
             'upside': float(upside),
-            'fecha_ultimo': fecha_ultimo_operado,
             'df_original': df
         }
 
@@ -709,13 +705,12 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 df_display = df.copy()
                 df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
                 
-                # Columnas ordenadas de manera compacta para evitar desplazamientos ocultos
-                columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'fecha_ultimo']
+                # Columnas reducidas exactamente a lo necesario para que quepan holgadamente en el ancho de la pantalla sin scroll lateral oculto
+                columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
                 
                 st.subheader(f"📊 {titulo} ({len(df)} empresas)")
                 
-                # Usamos use_container_width=True sin selección por checkboxes laterales para liberar espacio horizontal completo
-                event = st.dataframe(
+                st.dataframe(
                     df_display[columnas_mostrar], 
                     use_container_width=True, 
                     hide_index=True,
@@ -727,8 +722,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                         "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
                         "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
                         "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
-                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small"),
-                        "fecha_ultimo": st.column_config.TextColumn("Último Día", width="small")
+                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
                     }
                 )
 
