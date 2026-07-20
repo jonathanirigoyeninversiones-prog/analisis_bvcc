@@ -6,6 +6,8 @@ import requests
 import subprocess
 import sys
 from datetime import datetime, date
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
@@ -55,12 +57,11 @@ def obtener_dolar_oficial():
     
     return 0, ""
 
-# --- AHORA SE ACTUALIZA CADA HORA (3600 SEGUNDOS) ---
 @st.cache_data(ttl=3600)
 def get_dolar_con_cache():
     return obtener_dolar_oficial()
 
-# --- Cabecera con Título a la izquierda y Dólar a la derecha ---
+# --- Cabecera ---
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
@@ -87,13 +88,10 @@ with col_dolar:
                 <p style="margin: 0; font-weight: 600; font-size: 1.0rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
                     ⚠️ Precio $ BCV: No disponible
                 </p>
-                <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
-                    Intente recargar la página o verifique conexión
-                </p>
             </div>
             """, unsafe_allow_html=True)
 
-# --- Mostrar los filtros (debajo de la cabecera) ---
+# --- Filtros ---
 st.markdown("""
 **Filtros actuales (Sin Volumen):**  
 1️⃣ **Tendencia (EMA 30 < EMA 60)** → +25 pts si está barata.  
@@ -106,7 +104,7 @@ st.markdown("""
 """)
 
 # -------------------------------------------------------------------
-# 1. FUNCIÓN QUE CALCULA TODOS LOS INDICADORES TÉCNICOS
+# 1. CÁLCULO DE INDICADORES
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -145,7 +143,42 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 2. FUNCIÓN QUE ANALIZA CADA ARCHIVO (SIN VOLUMEN)
+# 2. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA
+# -------------------------------------------------------------------
+def generar_grafico_tecnico(df, nombre_empresa):
+    df_plot = df.tail(120).copy() # Mostrar los últimos 120 días operados
+
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                        vertical_spacing=0.08, 
+                        subplot_titles=(f'Evolución de Precio - {nombre_empresa}', 'Indicador RSI (14)'),
+                        row_width=[0.3, 0.7])
+
+    # Velas de Precio
+    fig.add_trace(go.Candlestick(x=df_plot['Date'],
+                    open=df_plot['Open'], high=df_plot['High'],
+                    low=df_plot['Low'], close=df_plot['Close'],
+                    name='Precio (Bs)'), row=1, col=1)
+
+    # Indicadores: EMA 30 y EMA 60
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.5), name='EMA 30'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#f43f5e', width=1.5), name='EMA 60'), row=1, col=1)
+
+    # Bandas de Bollinger
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='gray', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='gray', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
+
+    # Gráfico del RSI
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['RSI'], line=dict(color='#a855f7', width=2), name='RSI 14'), row=2, col=1)
+    
+    # Líneas de referencia RSI (30 y 70)
+    fig.add_hline(y=70, line_dash="dot", row=2, col=1, line_color="red")
+    fig.add_hline(y=30, line_dash="dot", row=2, col=1, line_color="green")
+
+    fig.update_layout(height=650, template='plotly_dark', xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=40, b=20))
+    return fig
+
+# -------------------------------------------------------------------
+# 3. ANALIZAR ARCHIVO
 # -------------------------------------------------------------------
 def analizar_archivo(ruta_archivo, fecha_referencia):
     try:
@@ -167,19 +200,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         df = df[df['Date'] <= fecha_limite]
 
         if df.empty:
-            return {
-                'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
-                'estado': '❌ Sin Datos',
-                'puntaje': 0,
-                'precio': 0,
-                'target': 0,
-                'upside': 0,
-                'rsi': 0,
-                'rsi_ayer': 0,
-                'ema30': 0,
-                'ema60': 0,
-                'fecha_ultimo': fecha_referencia.strftime('%Y-%m-%d'),
-            }
+            return None
 
         df = df.sort_values('Date').reset_index(drop=True)
 
@@ -259,131 +280,95 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             'ema30': float(ultimo['EMA30']) if not pd.isna(ultimo['EMA30']) else 0,
             'ema60': float(ultimo['EMA60']) if not pd.isna(ultimo['EMA60']) else 0,
             'fecha_ultimo': fecha_ultimo_operado,
+            'df_completo': df # Guardamos los datos para graficar
         }
 
     except Exception as e:
-        return {
-            'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
-            'estado': '⚠️ ERROR',
-            'puntaje': 0,
-            'precio': 0,
-            'target': 0,
-            'upside': 0,
-            'rsi': 0,
-            'rsi_ayer': 0,
-            'ema30': 0,
-            'ema60': 0,
-            'fecha_ultimo': 'Error',
-        }
+        return None
 
 # -------------------------------------------------------------------
-# 3. INTERFAZ DE USUARIO (CON CALENDARIO Y DOS TABLAS)
+# 4. INTERFAZ DE USUARIO
 # -------------------------------------------------------------------
 st.sidebar.header("⚙️ Configuración")
 
-carpeta = st.sidebar.text_input(
-    "📁 Ruta de la carpeta con tus CSV",
-    value="./datos_bvc"
-)
+carpeta = st.sidebar.text_input("📁 Ruta de la carpeta con tus CSV", value="./datos_bvc")
 
-fecha_referencia = st.sidebar.date_input(
-    "📅 Fecha de referencia (viaje en el tiempo)",
-    value=date.today(),
-    help="La app buscará el último dato disponible en o antes de esta fecha."
-)
+fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
 
-# --- BOTÓN DE ACTUALIZACIÓN ---
 st.sidebar.divider()
 st.sidebar.subheader("📥 Datos en la Nube")
-if st.sidebar.button("🔄 Actualizar Historial BVC", help="Descarga los datos más recientes desde internet"):
-    with st.spinner("Descargando precios históricos de la BVC... Esto puede tomar un minuto."):
+if st.sidebar.button("🔄 Actualizar Historial BVC"):
+    with st.spinner("Descargando datos históricos..."):
         try:
-            resultado = subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
-            st.sidebar.success("🎉 ¡Historial descargado con éxito!")
+            subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
+            st.sidebar.success("🎉 ¡Historial actualizado!")
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Error al descargar: {e}")
+            st.sidebar.error(f"Error: {e}")
 st.sidebar.divider()
 
 if st.sidebar.button("🔍 Analizar Carpeta"):
     if not os.path.exists(carpeta):
-        st.error("⚠️ La ruta no existe. Primero presiona el botón 'Actualizar Historial BVC' de arriba.")
+        st.error("⚠️ La ruta no existe. Primero presiona 'Actualizar Historial BVC'.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("La carpeta está vacía. Presiona 'Actualizar Historial BVC'.")
+            st.warning("La carpeta está vacía.")
         else:
             resultados = []
-            with st.spinner(f"Analizando {len(archivos)} archivos hasta {fecha_referencia.strftime('%Y-%m-%d')}..."):
+            with st.spinner("Procesando datos..."):
                 for archivo in archivos:
-                    ruta_completa = os.path.join(carpeta, archivo)
-                    res = analizar_archivo(ruta_completa, fecha_referencia)
+                    res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
                     if res:
                         resultados.append(res)
 
-            if not resultados:
-                st.error("❌ No se pudo procesar ningún archivo.")
-            else:
-                df_resultados = pd.DataFrame(resultados)
-                
-                df_activos = df_resultados[~df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
-                df_activos = df_activos.sort_values('puntaje', ascending=False)
+            if resultados:
+                st.session_state['resultados'] = resultados
+                st.session_state['analizado'] = True
 
-                dolar, _ = get_dolar_con_cache()
+if st.session_state.get('analizado', False):
+    resultados = st.session_state['resultados']
+    df_resultados = pd.DataFrame(resultados)
+    
+    dolar, _ = get_dolar_con_cache()
+    if dolar > 0:
+        df_resultados['precio_usd'] = df_resultados['precio'] / dolar
 
-                if dolar == 0:
-                    st.warning("⚠️ No se pudo obtener el dólar oficial. No se pueden crear las tablas por precio en USD.")
-                else:
-                    df_activos['precio_usd'] = df_activos['precio'] / dolar
+        df_menos_1 = df_resultados[df_resultados['precio_usd'] < 1].sort_values('puntaje', ascending=False)
+        df_mas_1 = df_resultados[df_resultados['precio_usd'] >= 1].sort_values('puntaje', ascending=False)
 
-                    df_menos_1 = df_activos[df_activos['precio_usd'] < 1].copy()
-                    df_mas_1 = df_activos[df_activos['precio_usd'] >= 1].copy()
+        def mostrar_tabla(df, titulo):
+            if df.empty:
+                return
+            df_display = df.copy()
+            df_display = df_display.rename(columns={'estado': 'Recomendado'})
+            for col in ['precio', 'target', 'ema30', 'ema60']:
+                df_display[col] = df_display[col].apply(fmt_bs)
+            df_display['precio_usd'] = df_display['precio_usd'].apply(lambda x: f"{x:.4f}")
+            df_display['upside'] = df_display['upside'].apply(lambda x: f"{x:.2f}%")
+            df_display['rsi'] = df_display['rsi'].apply(lambda x: f"{x:.2f}")
 
-                    def mostrar_tabla(df, titulo):
-                        if df.empty:
-                            st.info(f"📭 No hay acciones en '{titulo}'")
-                            return
-                        
-                        df_display = df.copy()
-                        df_display = df_display.rename(columns={'estado': 'Recomendado'})
-                        for col in ['precio', 'target', 'ema30', 'ema60']:
-                            df_display[col] = df_display[col].apply(fmt_bs)
-                        df_display['precio_usd'] = df_display['precio_usd'].apply(lambda x: f"{x:.4f}")
-                        df_display['upside'] = df_display['upside'].apply(lambda x: f"{x:.2f}%")
-                        df_display['rsi'] = df_display['rsi'].apply(lambda x: f"{x:.2f}")
-                        df_display['rsi_ayer'] = df_display['rsi_ayer'].apply(lambda x: f"{x:.2f}")
+            columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'rsi', 'ema30', 'ema60']
+            st.subheader(f"📊 {titulo} ({len(df)} acciones)")
+            st.dataframe(df_display[columnas], use_container_width=True, hide_index=True)
 
-                        columnas_mostrar = [
-                            'nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside',
-                            'rsi', 'rsi_ayer', 'ema30', 'ema60'
-                        ]
-                        st.subheader(f"📊 {titulo} ({len(df)} acciones)")
-                        st.dataframe(
-                            df_display[columnas_mostrar],
-                            use_container_width=True,
-                            hide_index=True,
-                            column_config={
-                                "puntaje": st.column_config.ProgressColumn("Puntaje", format="%d", min_value=0, max_value=100),
-                                "precio": st.column_config.TextColumn("Precio (Bs)"),
-                                "precio_usd": st.column_config.TextColumn("Precio (USD)"),
-                                "target": st.column_config.TextColumn("Target (Bs)"),
-                                "upside": st.column_config.TextColumn("Upside %"),
-                                "rsi": st.column_config.TextColumn("RSI Hoy"),
-                                "rsi_ayer": st.column_config.TextColumn("RSI Ayer"),
-                                "ema30": st.column_config.TextColumn("EMA 30 (Bs)"),
-                                "ema60": st.column_config.TextColumn("EMA 60 (Bs)"),
-                                "fecha_ultimo": st.column_config.TextColumn("Último Día Operado"),
-                            }
-                        )
+        st.subheader(f"📈 Top Oportunidades - Referencia: {fecha_referencia.strftime('%Y-%m-%d')}")
+        mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
+        mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-                    st.subheader(f"📈 Top Oportunidades - Referencia: {fecha_referencia.strftime('%Y-%m-%d')}")
-                    mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
-                    mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
+        # --- SECCIÓN DE GRÁFICO INTERACTIVO ---
+        st.divider()
+        st.subheader("📈 Analizador Gráfico de Acción")
+        
+        lista_empresas = sorted([r['nombre'] for r in resultados])
+        empresa_seleccionada = st.selectbox("Selecciona una empresa para ver su gráfico técnico detallado:", lista_empresas)
 
-                with st.expander("ℹ️ Ver archivos sin datos o con error"):
-                    df_error = df_resultados[df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
-                    df_error = df_error.rename(columns={'estado': 'Recomendado'})
-                    st.dataframe(df_error)
+        # Buscar los datos de la empresa seleccionada
+        datos_empresa = next((item for item in resultados if item["nombre"] == empresa_seleccionada), None)
+
+        if datos_empresa:
+            fig = generar_grafico_tecnico(datos_empresa['df_completo'], empresa_seleccionada)
+            st.plotly_chart(fig, use_container_width=True)
 
 else:
     st.info("👈 Configura la ruta de tu carpeta, selecciona una fecha y presiona 'Analizar Carpeta'.")
