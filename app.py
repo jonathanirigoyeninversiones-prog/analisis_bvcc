@@ -183,17 +183,18 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. DISEÑO GRÁFICO ULTRA-ELEGANTE Y MINIMALISTA
+# 3. DISEÑO GRÁFICO ULTRA-ELEGANTE (SIN RSI)
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(100).copy()
 
+    # 3 Pisos: Precio (60%), Volumen (20%), MACD (20%)
     fig = make_subplots(
-        rows=4, cols=1, 
+        rows=3, cols=1, 
         shared_xaxes=True, 
-        vertical_spacing=0.02, 
-        subplot_titles=('PRECIO', 'VOLUMEN', 'RSI', 'MACD'),
-        row_width=[0.18, 0.18, 0.16, 0.48]
+        vertical_spacing=0.03, 
+        subplot_titles=('PRECIO', 'VOLUMEN', 'MACD'),
+        row_width=[0.20, 0.20, 0.60]
     )
 
     # 1. VELAS JAPONESAS
@@ -221,32 +222,22 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         line=dict(color='#f59e0b', width=1.2), name='Vol MA20'
     ), row=2, col=1)
 
-    # 3. RSI
-    fig.add_trace(go.Scatter(
-        x=df_plot['Date'], y=df_plot['RSI'],
-        line=dict(color='#facc15', width=1.8, shape='spline'),
-        name='RSI'
-    ), row=3, col=1)
-    
-    fig.add_hline(y=70, line_dash="dot", row=3, col=1, line_color="rgba(244, 63, 94, 0.5)", line_width=1)
-    fig.add_hline(y=30, line_dash="dot", row=3, col=1, line_color="rgba(16, 185, 129, 0.5)", line_width=1)
-
-    # 4. MACD
+    # 3. MACD
     colores_hist = np.where(df_plot['MACD_Hist'] >= 0, 'rgba(16, 185, 129, 0.5)', 'rgba(244, 63, 94, 0.5)')
     fig.add_trace(go.Bar(
         x=df_plot['Date'], y=df_plot['MACD_Hist'],
         marker_color=colores_hist, name='Hist'
-    ), row=4, col=1)
+    ), row=3, col=1)
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['MACD'],
         line=dict(color='#38bdf8', width=1.2), name='MACD'
-    ), row=4, col=1)
+    ), row=3, col=1)
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['MACD_Signal'],
         line=dict(color='#fb923c', width=1.2), name='Signal'
-    ), row=4, col=1)
+    ), row=3, col=1)
 
     # ESTILIZACIÓN MINIMALISTA Y ELEGANTE
     fig.update_layout(
@@ -263,7 +254,6 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
     
-    # Ajuste de títulos de subgráficos
     for annotation in fig['layout']['annotations']:
         annotation['font'] = dict(size=11, color='#64748b', family='Segoe UI')
     
@@ -389,14 +379,14 @@ def mostrar_modal_grafico(datos_empresa):
     dolar, _ = get_dolar_con_cache()
     precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
     
-    # Tarjeta de Cabecera Flotante Eleganter
+    # Tarjeta de Cabecera Flotante Eleganter (Sin RSI)
     st.markdown(f"""
     <div class="header-card">
         <div>
             <span class="card-title">{datos_empresa['nombre']}</span>
             <span style="margin-left: 10px;" class="card-badge">{datos_empresa['estado']}</span>
         </div>
-        <div style="display: flex; gap: 20px;">
+        <div style="display: flex; gap: 25px;">
             <div>
                 <div class="metric-label">Precio Bs</div>
                 <div class="metric-value">{fmt_bs(datos_empresa['precio'])}</div>
@@ -408,10 +398,6 @@ def mostrar_modal_grafico(datos_empresa):
             <div>
                 <div class="metric-label">Potencial</div>
                 <div class="metric-value" style="color: #4ade80;">+{datos_empresa['upside']:.1f}%</div>
-            </div>
-            <div>
-                <div class="metric-label">RSI</div>
-                <div class="metric-value" style="color: #facc15;">{datos_empresa['rsi']}</div>
             </div>
         </div>
     </div>
