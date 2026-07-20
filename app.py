@@ -55,7 +55,8 @@ def obtener_dolar_oficial():
     
     return 0, ""
 
-@st.cache_data(ttl=300)
+# --- AHORA SE ACTUALIZA CADA HORA (3600 SEGUNDOS) ---
+@st.cache_data(ttl=3600)
 def get_dolar_con_cache():
     return obtener_dolar_oficial()
 
@@ -73,7 +74,7 @@ with col_dolar:
             st.markdown(f"""
             <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
                 <p style="margin: 0; font-weight: 700; font-size: 1.2rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
-                    💵 Dólar Oficial BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
+                    💵 Precio $ BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
                 </p>
                 <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
                     Actualizado: {fecha_dolar}
@@ -84,7 +85,7 @@ with col_dolar:
             st.markdown("""
             <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
                 <p style="margin: 0; font-weight: 600; font-size: 1.0rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
-                    ⚠️ Dólar Oficial BCV: No disponible
+                    ⚠️ Precio $ BCV: No disponible
                 </p>
                 <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
                     Intente recargar la página o verifique conexión
@@ -291,13 +292,12 @@ fecha_referencia = st.sidebar.date_input(
     help="La app buscará el último dato disponible en o antes de esta fecha."
 )
 
-# --- NUEVO BOTÓN: ACTUALIZAR DESDE LA INTERFAZ ---
+# --- BOTÓN DE ACTUALIZACIÓN ---
 st.sidebar.divider()
 st.sidebar.subheader("📥 Datos en la Nube")
 if st.sidebar.button("🔄 Actualizar Historial BVC", help="Descarga los datos más recientes desde internet"):
     with st.spinner("Descargando precios históricos de la BVC... Esto puede tomar un minuto."):
         try:
-            # Ejecuta el descargador en cascada directamente en el servidor
             resultado = subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
             st.sidebar.success("🎉 ¡Historial descargado con éxito!")
             st.rerun()
@@ -307,11 +307,11 @@ st.sidebar.divider()
 
 if st.sidebar.button("🔍 Analizar Carpeta"):
     if not os.path.exists(carpeta):
-        st.error("⚠️ La ruta no existe. Primero presiona el botón 'Actualizar Historial BVC' de arriba para descargar los datos.")
+        st.error("⚠️ La ruta no existe. Primero presiona el botón 'Actualizar Historial BVC' de arriba.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("La carpeta está vacía. Presiona el botón 'Actualizar Historial BVC' para descargar las acciones.")
+            st.warning("La carpeta está vacía. Presiona 'Actualizar Historial BVC'.")
         else:
             resultados = []
             with st.spinner(f"Analizando {len(archivos)} archivos hasta {fecha_referencia.strftime('%Y-%m-%d')}..."):
