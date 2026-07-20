@@ -705,4 +705,4 @@ if st.session_state.get('analizado', False):
             mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
-    st.info("👈 ")
+    st.info("👈 Presiona 'Analizar Mercado' en la barra lateral para desplegar la información.")
