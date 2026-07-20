@@ -112,7 +112,6 @@ def cambiar_temporalidad(df, temporalidad):
     df.set_index('Date', inplace=True)
     
     if temporalidad == "1 Semana":
-        # Agrupa por semanas (W). Open toma el primero, Close el último, High el máximo, Low el mínimo.
         df_resampled = df.resample('W').agg({
             'Open': 'first',
             'High': 'max',
@@ -121,7 +120,6 @@ def cambiar_temporalidad(df, temporalidad):
             'Volume': 'sum'
         }).dropna()
     elif temporalidad == "1 Mes":
-        # Agrupa por meses (ME)
         df_resampled = df.resample('ME').agg({
             'Open': 'first',
             'High': 'max',
@@ -130,7 +128,6 @@ def cambiar_temporalidad(df, temporalidad):
             'Volume': 'sum'
         }).dropna()
     else:
-        # Si es 1 Día, se queda exactamente igual
         df_resampled = df.reset_index()
         return df_resampled
         
@@ -177,39 +174,63 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA
+# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA PROFESIONAL
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
-    # Mostramos los últimos 120 registros de la temporalidad seleccionada
-    df_plot = df.tail(120).copy() 
+    df_plot = df.tail(90).copy() # Mostrar últimos 90 registros para mejor definición visual
 
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                        vertical_spacing=0.08, 
-                        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Indicador RSI (14)'),
-                        row_width=[0.3, 0.7])
+    # Creamos un diseño de 3 filas (Precio 60%, Volumen 15%, RSI 25%)
+    fig = make_subplots(
+        rows=3, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.03, 
+        subplot_titles=(f'Gráfico Técnico ({temporalidad}) - {nombre_empresa}', 'Volumen de Transacciones', 'Fuerza Relativa RSI (14)'),
+        row_width=[0.22, 0.15, 0.63]
+    )
 
-    # Velas de Precio
-    fig.add_trace(go.Candlestick(x=df_plot['Date'],
-                    open=df_plot['Open'], high=df_plot['High'],
-                    low=df_plot['Low'], close=df_plot['Close'],
-                    name='Precio (Bs)'), row=1, col=1)
+    # 1. VELAS JAPONESAS (Fila 1)
+    fig.add_trace(go.Candlestick(
+        x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
+        name='Precio (Bs)',
+        increasing_line_color='#22c55e', decreasing_line_color='#ef4444',
+        increasing_fillcolor='#22c55e', decreasing_fillcolor='#ef4444'
+    ), row=1, col=1)
 
-    # Indicadores: EMA 30 y EMA 60
+    # Indicadores encima del precio
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.5), name='EMA 30'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#f43f5e', width=1.5), name='EMA 60'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
 
-    # Bandas de Bollinger
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='gray', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='gray', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
+    # 2. INDICADOR DE VOLUMEN CON COLORES DINÁMICOS (Fila 2)
+    # Si Cierre >= Apertura -> Verde, si no -> Rojo
+    colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], '#22c55e', '#ef4444')
+    fig.add_trace(go.Bar(
+        x=df_plot['Date'], y=df_plot['Volume'],
+        marker_color=colores_volumen, name='Volumen',
+        opacity=0.8
+    ), row=2, col=1)
 
-    # Gráfico del RSI
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['RSI'], line=dict(color='#a855f7', width=2), name='RSI 14'), row=2, col=1)
+    # 3. GRÁFICO DEL RSI (Fila 3)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['RSI'], line=dict(color='#a855f7', width=2), name='RSI'), row=3, col=1)
+    fig.add_hline(y=70, line_dash="dash", row=3, col=1, line_color="#ef4444", line_width=1)
+    fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
+
+    # Estilo y diseño oscuro idéntico a TradingView
+    fig.update_layout(
+        height=750, 
+        template='plotly_dark', 
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=40, r=40, t=50, b=30),
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
     
-    # Líneas de referencia RSI (30 y 70)
-    fig.add_hline(y=70, line_dash="dot", row=2, col=1, line_color="red")
-    fig.add_hline(y=30, line_dash="dot", row=2, col=1, line_color="green")
-
-    fig.update_layout(height=650, template='plotly_dark', xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=40, b=20))
+    fig.update_yaxes(title_text="Precio (Bs)", row=1, col=1)
+    fig.update_yaxes(title_text="Nominal", row=2, col=1)
+    fig.update_yaxes(title_text="Nivel", range=[10, 90], row=3, col=1)
+    
     return fig
 
 # -------------------------------------------------------------------
@@ -247,7 +268,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             ultimo = df_con_volumen.iloc[-1]
             fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
 
-        # El análisis base de las tablas se queda con los datos diarios originales
         df_calculado = calcular_indicadores(df.copy())
 
         ultimo_fila = df_calculado[df_calculado['Date'] == ultimo['Date']]
@@ -316,7 +336,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             'ema30': float(ultimo_datos['EMA30']) if not pd.isna(ultimo_datos['EMA30']) else 0,
             'ema60': float(ultimo_datos['EMA60']) if not pd.isna(ultimo_datos['EMA60']) else 0,
             'fecha_ultimo': fecha_ultimo_operado,
-            'df_original': df # Conservamos el df limpio para aplicar temporalidades dinámicas
+            'df_original': df
         }
 
     except Exception as e:
@@ -392,7 +412,7 @@ if st.session_state.get('analizado', False):
         mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
         mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-        # --- SECCIÓN DE GRÁFICO INTERACTIVO CON SELECTOR DE TEMPORALIDADES ---
+        # --- SECCIÓN DE GRÁFICO INTERACTIVO MULTI-TEMPORALIDAD ---
         st.divider()
         st.subheader("📈 Analizador Gráfico de Acción Multi-Temporalidad")
         
@@ -403,20 +423,13 @@ if st.session_state.get('analizado', False):
             empresa_seleccionada = st.selectbox("Selecciona una empresa para analizar:", lista_empresas)
             
         with col_temp:
-            # Selector de temporalidades tipo TradingView
             temporalidad = st.radio("Temporalidad del gráfico:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
 
-        # Buscar los datos originales de la empresa seleccionada
         datos_empresa = next((item for item in resultados if item["nombre"] == empresa_seleccionada), None)
 
         if datos_empresa:
-            # 1. Transformamos los datos a la temporalidad elegida (Día, Semana o Mes)
             df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
-            
-            # 2. Recalculamos los indicadores (EMAs, Bollinger, RSI) basándonos en la nueva estructura temporal
             df_indicadores = calcular_indicadores(df_convertido)
-            
-            # 3. Dibujamos la gráfica limpia
             fig = generar_grafico_tecnico(df_indicadores, empresa_seleccionada, temporalidad)
             st.plotly_chart(fig, use_container_width=True)
 
