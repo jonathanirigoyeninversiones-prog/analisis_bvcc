@@ -112,6 +112,12 @@ if 'lista_emas' not in st.session_state:
         {"periodo": 200, "color": "#a855f7"}
     ]
 
+if 'analizado' not in st.session_state:
+    st.session_state['analizado'] = False
+
+if 'resultados' not in st.session_state:
+    st.session_state['resultados'] = []
+
 def fmt_bs(valor):
     if pd.isna(valor) or valor is None:
         return "0,00"
@@ -552,7 +558,10 @@ if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
             st.sidebar.error(f"Error: {e}")
 
 st.sidebar.divider()
-btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary")
+
+# Botón directo y lineal con control de estado simple
+if st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary"):
+    st.session_state['analizado'] = True
 
 col_titulo, col_dolar = st.columns([2, 1])
 
@@ -576,7 +585,8 @@ with col_dolar:
 
 carpeta = "./datos_bvc"
 
-if btn_analizar:
+# Lógica unificada para procesar y renderizar de golpe cuando el estado es True
+if st.session_state['analizado']:
     if not os.path.exists(carpeta):
         st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC'.")
     else:
@@ -594,9 +604,10 @@ if btn_analizar:
 
             if resultados:
                 st.session_state['resultados'] = resultados
-                st.session_state['analizado'] = True
+            else:
+                st.warning("No se pudieron procesar los archivos CSV.")
 
-if st.session_state.get('analizado', False):
+if st.session_state['analizado'] and st.session_state['resultados']:
     resultados = st.session_state['resultados']
     df_resultados = pd.DataFrame(resultados)
     
@@ -669,13 +680,13 @@ if st.session_state.get('analizado', False):
                 key=clave_tabla,
                 column_config={
                     "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                    "Recomendación": st.column_config.TextColumn("Recomendación", width="small"),
+                    "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
                     "Puntaje": st.column_config.ProgressColumn(
                         "Puntaje",
                         format="%f pts",
                         min_value=0,
                         max_value=100,
-                        width="large"
+                        width="medium"
                     ),
                     "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
                     "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
