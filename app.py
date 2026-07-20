@@ -669,13 +669,13 @@ if st.session_state.get('analizado', False):
                 key=clave_tabla,
                 column_config={
                     "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                    "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
+                    "Recomendación": st.column_config.TextColumn("Recomendación", width="small"),
                     "Puntaje": st.column_config.ProgressColumn(
                         "Puntaje",
                         format="%f pts",
                         min_value=0,
                         max_value=100,
-                        width="small"
+                        width="large"
                     ),
                     "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
                     "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
