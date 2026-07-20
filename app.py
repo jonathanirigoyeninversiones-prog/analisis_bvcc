@@ -388,11 +388,13 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         df = df.dropna(subset=['Date'])
 
         fecha_limite = pd.to_datetime(fecha_referencia)
-        df = df[df['Date'] <= fecha_limite]
-        if df.empty:
-            return None
+        df_filtrado = df[df['Date'] <= fecha_limite]
+        
+        # Si la fecha seleccionada es menor a todo el historial, usamos todo el DataFrame para no retornar None
+        if df_filtrado.empty:
+            df_filtrado = df
 
-        df = df.sort_values('Date').reset_index(drop=True)
+        df = df_filtrado.sort_values('Date').reset_index(drop=True)
         df_con_volumen = df[df['Volume'] > 0]
         
         if df_con_volumen.empty:
@@ -445,7 +447,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
             'upside': float(upside),
             'df_original': df
         }
-    except Exception:
+    except Exception as e:
         return None
 
 if 'empresa_modal' not in st.session_state:
@@ -559,7 +561,6 @@ if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
 
 st.sidebar.divider()
 
-# Botón directo y lineal con control de estado simple
 if st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary"):
     st.session_state['analizado'] = True
 
@@ -585,17 +586,16 @@ with col_dolar:
 
 carpeta = "./datos_bvc"
 
-# Lógica unificada para procesar y renderizar de golpe cuando el estado es True
 if st.session_state['analizado']:
     if not os.path.exists(carpeta):
         st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC'.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
+            st.warning("No hay datos descargados en la carpeta `./datos_bvc`. Presiona 'Actualizar Historial BVC' o asegúrate de que existan archivos CSV.")
         else:
             resultados = []
-            with st.spinner("Analizando..."):
+            with st.spinner("Analizando mercado y calculando indicadores..."):
                 emas_tuple = tuple((item['periodo'], item['color']) for item in st.session_state['lista_emas'])
                 for archivo in archivos:
                     res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia, emas_tuple)
@@ -605,7 +605,7 @@ if st.session_state['analizado']:
             if resultados:
                 st.session_state['resultados'] = resultados
             else:
-                st.warning("No se pudieron procesar los archivos CSV.")
+                st.warning("Los archivos CSV existen pero no se pudieron procesar correctamente. Revisa el formato de las columnas ('Date', 'Close', 'High', 'Low', 'Open', 'Volume').")
 
 if st.session_state['analizado'] and st.session_state['resultados']:
     resultados = st.session_state['resultados']
