@@ -12,7 +12,67 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Analizador BVC - Sin Volumen", layout="wide")
+st.set_page_config(page_title="Analizador BVC - Premium", layout="wide")
+
+# ESTILOS CSS PERSONALIZADOS PARA UN MODAL ELEGANTE
+st.markdown("""
+<style>
+    /* Fondo oscuro y tipografía refinada */
+    .stApp {
+        background-color: #050505;
+    }
+    
+    /* Estilos del Modal */
+    div[role="dialog"] {
+        background-color: #0a0a0c !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 16px !important;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8) !important;
+    }
+
+    /* Tarjeta resumida del Modal */
+    .header-card {
+        background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
+        border: 1px solid #1e293b;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .card-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin: 0;
+    }
+    
+    .card-badge {
+        background: rgba(34, 197, 94, 0.15);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .metric-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #f8fafc;
+    }
+    
+    .metric-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # --- Función para formatear números en Bs ---
 def fmt_bs(valor):
@@ -25,23 +85,13 @@ def fmt_bs(valor):
     except:
         return "0,00"
 
-# --- Obtener el dólar oficial con múltiples APIs de respaldo ---
+# --- Obtener el dólar oficial ---
 def obtener_dolar_oficial():
     apis = [
-        {
-            "url": "https://api.exchangerate.host/latest?base=USD&symbols=VES",
-            "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))
-        },
-        {
-            "url": "https://open.er-api.com/v6/latest/USD",
-            "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))
-        },
-        {
-            "url": "https://api.exchangeratesapi.io/latest?base=USD&symbols=VES",
-            "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))
-        }
+        {"url": "https://api.exchangerate.host/latest?base=USD&symbols=VES", "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))},
+        {"url": "https://open.er-api.com/v6/latest/USD", "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))},
+        {"url": "https://api.exchangeratesapi.io/latest?base=USD&symbols=VES", "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))}
     ]
-    
     for api in apis:
         try:
             response = requests.get(api["url"], timeout=15)
@@ -52,9 +102,8 @@ def obtener_dolar_oficial():
                     fecha = data.get("date", datetime.now().strftime("%Y-%m-%d"))
                     if precio and precio > 0:
                         return precio, fecha
-        except Exception as e:
+        except Exception:
             continue
-    
     return 0, ""
 
 @st.cache_data(ttl=3600)
@@ -62,7 +111,7 @@ def get_dolar_con_cache():
     return obtener_dolar_oficial()
 
 # -------------------------------------------------------------------
-# 1. FUNCIÓN DE AGRUPACIÓN POR TEMPORALIDAD (RESAMPLING)
+# 1. TEMPORALIDADES (RESAMPLING)
 # -------------------------------------------------------------------
 def cambiar_temporalidad(df, temporalidad):
     df = df.copy()
@@ -71,19 +120,11 @@ def cambiar_temporalidad(df, temporalidad):
     
     if temporalidad == "1 Semana":
         df_resampled = df.resample('W').agg({
-            'Open': 'first',
-            'High': 'max',
-            'Low': 'min',
-            'Close': 'last',
-            'Volume': 'sum'
+            'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
         }).dropna()
     elif temporalidad == "1 Mes":
         df_resampled = df.resample('ME').agg({
-            'Open': 'first',
-            'High': 'max',
-            'Low': 'min',
-            'Close': 'last',
-            'Volume': 'sum'
+            'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
         }).dropna()
     else:
         df_resampled = df.reset_index()
@@ -93,7 +134,7 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# 2. CÁLCULO DE INDICADORES SOBRE LOS CSV
+# 2. CÁLCULO DE INDICADORES
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -112,7 +153,6 @@ def calcular_indicadores(df):
     rs = avg_gain / avg_loss
     rsi_raw = 100 - (100 / (1 + rs))
     
-    # Suavizado del RSI
     df['RSI'] = rsi_raw.ewm(span=3, adjust=False).mean()
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
@@ -127,7 +167,6 @@ def calcular_indicadores(df):
 
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
-    # MACD (12, 26, 9)
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
     ema26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
@@ -144,95 +183,89 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. GENERAR GRÁFICA INTERACTIVA SIN LEYENDAS INNECESARIAS
+# 3. DISEÑO GRÁFICO ULTRA-ELEGANTE Y MINIMALISTA
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
-    df_plot = df.tail(120).copy()
+    df_plot = df.tail(100).copy()
 
-    # Títulos limpios de cada subgráfico
     fig = make_subplots(
         rows=4, cols=1, 
         shared_xaxes=True, 
-        vertical_spacing=0.03, 
-        subplot_titles=(f'{nombre_empresa} ({temporalidad})', 'Volumen', 'RSI', 'MACD'),
-        row_width=[0.175, 0.175, 0.15, 0.50]
+        vertical_spacing=0.02, 
+        subplot_titles=('PRECIO', 'VOLUMEN', 'RSI', 'MACD'),
+        row_width=[0.18, 0.18, 0.16, 0.48]
     )
 
-    # 1. Velas Japonesas
+    # 1. VELAS JAPONESAS
     fig.add_trace(go.Candlestick(
         x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
         name='Precio',
-        increasing_line_color='#22c55e', decreasing_line_color='#ef4444',
-        increasing_fillcolor='#22c55e', decreasing_fillcolor='#ef4444'
+        increasing_line_color='#10b981', decreasing_line_color='#f43f5e',
+        increasing_fillcolor='#10b981', decreasing_fillcolor='#f43f5e'
     ), row=1, col=1)
 
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.5), name='EMA 30'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#f43f5e', width=1.5), name='EMA 60'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='BB Sup'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='BB Inf'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.2), name='EMA 30'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#fb7185', width=1.2), name='EMA 60'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.15)', width=1, dash='dot'), name='BB Sup'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.15)', width=1, dash='dot'), name='BB Inf'), row=1, col=1)
 
-    # 2. Volumen
-    fig.add_trace(go.Scatter(
-        x=df_plot['Date'], y=df_plot['Volume'],
-        fill='tozeroy',
-        fillcolor='rgba(128, 128, 128, 0.3)',
-        line=dict(color='rgba(128, 128, 128, 0.5)', width=1),
-        name='Área Vol'
-    ), row=2, col=1)
-
-    colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], '#22c55e', '#ef4444')
+    # 2. VOLUMEN
+    colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], 'rgba(16, 185, 129, 0.6)', 'rgba(244, 63, 94, 0.6)')
     fig.add_trace(go.Bar(
         x=df_plot['Date'], y=df_plot['Volume'],
-        marker_color=colores_volumen, name='Volumen', opacity=0.7
+        marker_color=colores_volumen, name='Volumen'
     ), row=2, col=1)
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Vol_MA20'],
-        line=dict(color='#f59e0b', width=1.5), name='Vol MA20'
+        line=dict(color='#f59e0b', width=1.2), name='Vol MA20'
     ), row=2, col=1)
 
     # 3. RSI
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['RSI'],
-        line=dict(color='#facc15', width=2, shape='spline'),
+        line=dict(color='#facc15', width=1.8, shape='spline'),
         name='RSI'
     ), row=3, col=1)
     
-    fig.add_hline(y=70, line_dash="dash", row=3, col=1, line_color="#ef4444", line_width=1)
-    fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
+    fig.add_hline(y=70, line_dash="dot", row=3, col=1, line_color="rgba(244, 63, 94, 0.5)", line_width=1)
+    fig.add_hline(y=30, line_dash="dot", row=3, col=1, line_color="rgba(16, 185, 129, 0.5)", line_width=1)
 
     # 4. MACD
-    colores_hist = np.where(df_plot['MACD_Hist'] >= 0, '#22c55e', '#ef4444')
+    colores_hist = np.where(df_plot['MACD_Hist'] >= 0, 'rgba(16, 185, 129, 0.5)', 'rgba(244, 63, 94, 0.5)')
     fig.add_trace(go.Bar(
         x=df_plot['Date'], y=df_plot['MACD_Hist'],
-        marker_color=colores_hist, name='Hist', opacity=0.6
+        marker_color=colores_hist, name='Hist'
     ), row=4, col=1)
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['MACD'],
-        line=dict(color='#38bdf8', width=1.5), name='MACD'
+        line=dict(color='#38bdf8', width=1.2), name='MACD'
     ), row=4, col=1)
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['MACD_Signal'],
-        line=dict(color='#f97316', width=1.5), name='Signal'
+        line=dict(color='#fb923c', width=1.2), name='Signal'
     ), row=4, col=1)
 
-    # DESACTIVAMOS showlegend PARA QUITAR TODA LA LEYENDA SUPERIOR AMONTONADA
+    # ESTILIZACIÓN MINIMALISTA Y ELEGANTE
     fig.update_layout(
-        height=820, 
-        template='plotly_dark', 
+        height=720, 
+        paper_bgcolor='#0a0a0c',
+        plot_bgcolor='#0a0a0c',
         xaxis_rangeslider_visible=False,
-        margin=dict(l=20, r=20, t=30, b=20),
+        margin=dict(l=10, r=10, t=25, b=10),
         hovermode='x unified',
         dragmode='pan',
         showlegend=False
     )
     
-    fig.update_yaxes(title_text="Bs", row=1, col=1)
-    fig.update_yaxes(title_text="Vol", row=2, col=1)
-    fig.update_yaxes(title_text="RSI", range=[10, 90], row=3, col=1)
-    fig.update_yaxes(title_text="MACD", row=4, col=1)
+    fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
+    
+    # Ajuste de títulos de subgráficos
+    for annotation in fig['layout']['annotations']:
+        annotation['font'] = dict(size=11, color='#64748b', family='Segoe UI')
     
     return fig
 
@@ -346,14 +379,47 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         return None
 
 # -------------------------------------------------------------------
-# 5. CONTROLADOR DEL MODAL FLOTANTE
+# 5. MODAL ELEGANTE REDISEÑADO
 # -------------------------------------------------------------------
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
 
-@st.dialog("📊 Gráfico Técnico Avanzado", width="large")
+@st.dialog(" Análitica de Mercado", width="large")
 def mostrar_modal_grafico(datos_empresa):
-    temporalidad = st.radio("Temporalidad:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
+    dolar, _ = get_dolar_con_cache()
+    precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
+    
+    # Tarjeta de Cabecera Flotante Eleganter
+    st.markdown(f"""
+    <div class="header-card">
+        <div>
+            <span class="card-title">{datos_empresa['nombre']}</span>
+            <span style="margin-left: 10px;" class="card-badge">{datos_empresa['estado']}</span>
+        </div>
+        <div style="display: flex; gap: 20px;">
+            <div>
+                <div class="metric-label">Precio Bs</div>
+                <div class="metric-value">{fmt_bs(datos_empresa['precio'])}</div>
+            </div>
+            <div>
+                <div class="metric-label">Precio USD</div>
+                <div class="metric-value">${precio_usd:.4f}</div>
+            </div>
+            <div>
+                <div class="metric-label">Potencial</div>
+                <div class="metric-value" style="color: #4ade80;">+{datos_empresa['upside']:.1f}%</div>
+            </div>
+            <div>
+                <div class="metric-label">RSI</div>
+                <div class="metric-value" style="color: #facc15;">{datos_empresa['rsi']}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_temp, col_esp = st.columns([2, 3])
+    with col_temp:
+        temporalidad = st.radio("Temporalidad", ["1 Día", "1 Semana", "1 Mes"], horizontal=True, label_visibility="collapsed")
 
     df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
     df_indicadores = calcular_indicadores(df_convertido)
@@ -388,8 +454,8 @@ btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=Tr
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
-    st.title("📊 Analizador de Oportunidades BVC")
-    st.markdown("**Estrategia sin volumen** - Basado únicamente en Precio, EMA, RSI y ATR.")
+    st.title("📊 Terminal Analítico BVC")
+    st.markdown("**Bolsa de Valores de Caracas** - Estrategia cuantitativa sin volumen.")
 
 with col_dolar:
     with st.spinner("Cargando dólar..."):
@@ -397,7 +463,7 @@ with col_dolar:
         if dolar_oficial > 0:
             st.markdown(f"""
             <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
-                <p style="margin: 0; font-weight: 700; font-size: 1.2rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
+                <p style="margin: 0; font-weight: 700; font-size: 1.2rem; color: #facc15;">
                     💵 Precio $ BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
                 </p>
                 <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
@@ -406,30 +472,18 @@ with col_dolar:
             </div>
             """, unsafe_allow_html=True)
 
-# --- FILTROS ---
-st.markdown("""
-**Filtros actuales (Sin Volumen):**  
-1️⃣ **Tendencia (EMA 30 < EMA 60)** → +25 pts si está barata.  
-2️⃣ **Distancia a EMA 60** → Hasta +40 pts si está muy por debajo.  
-3️⃣ **Banda de Bollinger** → +15 pts si toca el suelo.  
-4️⃣ **RSI (Nivel)** → Hasta +10 pts si está cerca de 30.  
-5️⃣ **RSI (Pendiente)** → +10 pts si está subiendo y en sobreventa.  
-6️⃣ **Potencial ATR** → +10 pts si subida >20%, +5 pts si >10%.  
-7️⃣ **Bonus EMA 100** → +5 pts si está por debajo.
-""")
-
 carpeta = "./datos_bvc"
 
 if btn_analizar:
     if not os.path.exists(carpeta):
-        st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC' para descargar el mercado.")
+        st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC'.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
             st.warning("No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
         else:
             resultados = []
-            with st.spinner("Procesando todas las empresas del mercado desde los CSV..."):
+            with st.spinner("Procesando datos del mercado..."):
                 for archivo in archivos:
                     res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
                     if res:
@@ -465,7 +519,7 @@ if st.session_state.get('analizado', False):
             columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'rsi', 'ema30', 'ema60']
             
             st.subheader(f"📊 {titulo} ({len(df)} acciones)")
-            st.caption("💡 Haz clic sobre cualquier fila para abrir la gráfica técnica de la empresa.")
+            st.caption("💡 Haz clic en una fila para desplegar la analítica de la empresa.")
             
             evento = st.dataframe(
                 df_display[columnas], 
@@ -484,13 +538,13 @@ if st.session_state.get('analizado', False):
                 if datos_empresa:
                     st.session_state['empresa_modal'] = datos_empresa
 
-        st.subheader(f"📈 Top Oportunidades - Referencia: {fecha_referencia.strftime('%Y-%m-%d')}")
+        st.subheader(f"📈 Oportunidades del Mercado - {fecha_referencia.strftime('%Y-%m-%d')}")
         
-        mostrar_tabla_interactiva(df_menos_1, "🔽 Menos de 1 USD", "tabla_menos_1")
-        mostrar_tabla_interactiva(df_mas_1, "🔼 Mayor o igual a 1 USD", "tabla_mas_1")
+        mostrar_tabla_interactiva(df_menos_1, "🔽 Acciones Menores a 1 USD", "tabla_menos_1")
+        mostrar_tabla_interactiva(df_mas_1, "🔼 Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
 
         if st.session_state['empresa_modal'] is not None:
             mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
-    st.info("👈 Presiona 'Analizar Mercado' en el menú lateral para cargar las tablas de oportunidades.")
+    st.info("👈 Presiona 'Analizar Mercado' en el menú lateral para desplegar las tablas.")
