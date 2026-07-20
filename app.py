@@ -447,12 +447,12 @@ def mostrar_modal_grafico(datos_empresa):
 # -------------------------------------------------------------------
 # 6. INTERFAZ PRINCIPAL
 # -------------------------------------------------------------------
-st.sidebar.subheader("📥 Control del Mercado")
+st.sidebar.subheader("📥 Análisis de Mercado")
 fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
 
 st.sidebar.divider()
 if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
-    with st.spinner("Descargando datos históricos..."):
+    with st.spinner("Analizando..."):
         try:
             subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
             st.sidebar.success("🎉 ¡Historial actualizado!")
@@ -496,7 +496,7 @@ if btn_analizar:
             st.warning("No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
         else:
             resultados = []
-            with st.spinner("Ejecutando algoritmo cuantitativo..."):
+            with st.spinner("Analizando..."):
                 for archivo in archivos:
                     res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
                     if res:
@@ -514,7 +514,6 @@ if st.session_state.get('analizado', False):
     if dolar > 0:
         df_resultados['precio_usd'] = df_resultados['precio'] / dolar
 
-        # CONTEO EXACTO DE OPORTUNIDADES DE COMPRA (SIN DEPENDER DE EMOJIS)
         total_compras = len(df_resultados[df_resultados['estado'].str.contains('COMPRA', case=False, na=False)])
         top_accion = df_resultados.sort_values('puntaje', ascending=False).iloc[0]
         
@@ -553,7 +552,6 @@ if st.session_state.get('analizado', False):
             
             df_display = df.copy()
             
-            # FORMATO CON EMOJIS VISUALES PARA LA TABLA
             df_display['estado_visual'] = df_display['estado'].apply(
                 lambda x: '✅ COMPRA' if 'COMPRA' in x else ('🔍 SEGUIMIENTO' if 'SEGUIMIENTO' in x else '⏸️ ESPERAR')
             )
@@ -597,7 +595,6 @@ if st.session_state.get('analizado', False):
                 }
             )
             
-            # CAPTURAR CLIC DE FILA
             evento = st.session_state.get(clave_tabla)
             if evento:
                 filas_seleccionadas = evento.get("selection", {}).get("rows", [])
