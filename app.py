@@ -399,29 +399,25 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
 
         puntaje = 0
         
-        # 1. EVALUACIÓN DE ZONA BAJA / ACUMULACIÓN (Tu teoría: buscar valor castigado cerca de soporte)
         if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] <= (ultimo_datos['BB_lower'] * 1.05):
-            puntaje += 35  # Premio fuerte por estar tocando o cerca de la banda inferior (suelo)
+            puntaje += 35
 
-        # 2. GATILLO DE RSI Y SOBREVENTA (Cerca del nivel 30)
         rsi_hoy = ultimo_datos['RSI']
         rsi_ayer = ultimo_datos['RSI_Anterior']
         if not pd.isna(rsi_hoy):
-            # Premiar estar cerca de 30 o rebotando desde abajo
             distancia_30 = abs(rsi_hoy - 30)
             if distancia_30 <= 10:
                 puntaje += 25
             if not pd.isna(rsi_ayer) and rsi_hoy > rsi_ayer:
-                puntaje += 15  # El RSI viene girando hacia arriba
+                puntaje += 15
 
-        # 3. GATILLO DE VOLUMEN INSTITUCIONAL (La teoría de tu mentor: vela con volumen verde)
         vol_actual = ultimo_datos['Volume']
         vol_ma = ultimo_datos['Vol_MA20']
         es_vela_verde = ultimo_datos['Close'] >= ultimo_datos['Open']
         
         if not pd.isna(vol_ma) and vol_ma > 0 and es_vela_verde:
             if vol_actual >= (vol_ma * 1.5):
-                puntaje += 25  # Volumen superior al 50% de la media con vela verde
+                puntaje += 25
 
         if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
             target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
@@ -431,7 +427,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
 
         puntaje = min(puntaje, 100)
         
-        # Condición estricta de COMPRA: Puntuación alta + Vela verde con volumen de giro o soporte
         estado = 'COMPRA' if puntaje >= 65 else ('SEGUIMIENTO' if puntaje >= 40 else 'ESPERAR')
 
         return {
@@ -561,8 +556,7 @@ btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=Tr
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
-    st.title("⚡ Terminal Analítico BVC")
-    st.caption("Bolsa de Valores de Caracas • Estrategia cuantitativa automatizada")
+    st.title("⚡ Análisis BVC")
 
 with col_dolar:
     with st.spinner("Cargando dólar..."):
