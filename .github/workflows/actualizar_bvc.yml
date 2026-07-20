@@ -5,6 +5,10 @@ on:
     - cron: '0 * * * *'
   workflow_dispatch:
 
+# Permisos explícitos para que el bot pueda escribir en el repositorio
+permissions:
+  contents: write
+
 jobs:
   actualizar:
     runs-on: ubuntu-latest
