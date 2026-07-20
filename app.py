@@ -374,16 +374,23 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
 @st.cache_data(ttl=3600)
 def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
     try:
-        try:
-            df = pd.read_csv(ruta_archivo, sep=None, engine='python', decimal=',', thousands='.')
-        except Exception:
-            df = pd.read_csv(ruta_archivo)
+        # Intento de lectura flexible para cualquier formato de CSV (coma o punto y coma)
+        for sep_val in [None, ',', ';', '\t']:
+            try:
+                if sep_val is None:
+                    df = pd.read_csv(ruta_archivo, engine='python', decimal=',', thousands='.')
+                else:
+                    df = pd.read_csv(ruta_archivo, sep=sep_val, decimal=',', thousands='.')
+                if len(df.columns) > 1:
+                    break
+            except Exception:
+                continue
 
         df.columns = df.columns.str.replace('.CR', '', regex=False).str.strip()
 
         renombres = {}
         for col in df.columns:
-            c_low = col.lower()
+            c_low = str(col).lower()
             if 'date' in c_low or 'fecha' in c_low:
                 renombres[col] = 'Date'
             elif 'close' in c_low or 'cierre' in c_low:
@@ -399,6 +406,18 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         
         df = df.rename(columns=renombres)
 
+        # Si aún no detecta columnas estándar, asignamos por posición si tiene al menos 5 columnas
+        if 'Close' not in df.columns and len(df.columns) >= 5:
+            pos_cols = list(df.columns)
+            df = df.rename(columns={
+                pos_cols[0]: 'Date',
+                pos_cols[1]: 'Open',
+                pos_cols[2]: 'High',
+                pos_cols[3]: 'Low',
+                pos_cols[4]: 'Close',
+                pos_cols[5] if len(pos_cols) > 5 else pos_cols[-1]: 'Volume'
+            })
+
         for col in ['Close', 'High', 'Low', 'Open', 'Volume']:
             if col in df.columns:
                 if df[col].dtype == object:
@@ -407,8 +426,8 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
             else:
                 df[col] = 0.0
 
-        df = df.dropna(subset=['Close', 'High', 'Low', 'Open'])
-        if len(df) < 5:
+        df = df.dropna(subset=['Close'])
+        if len(df) < 1:
             return None
 
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -416,7 +435,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         if df.empty:
             return None
 
-        # Lectura robusta: ordenamos y usamos todo el historial disponible para evitar filtros vacíos
         df = df.sort_values('Date').reset_index(drop=True)
         df_con_volumen = df[df['Volume'] > 0]
         
