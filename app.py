@@ -4,8 +4,6 @@ import numpy as np
 import os
 import requests
 from datetime import datetime, date
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
@@ -154,20 +152,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-OPCIONES_INDICADORES = ["EMAs Personalizadas", "Bandas Bollinger", "Supertrend", "VWAP", "Parabolic SAR", "MACD", "RSI (14)"]
-
-if 'indicadores_activos' not in st.session_state:
-    st.session_state['indicadores_activos'] = ["EMAs Personalizadas", "RSI (14)"]
-
 if 'lista_emas' not in st.session_state:
     st.session_state['lista_emas'] = [
         {"periodo": 50, "color": "#38bdf8"},
         {"periodo": 100, "color": "#facc15"},
         {"periodo": 200, "color": "#a855f7"}
     ]
-
-if 'empresa_seleccionada' not in st.session_state:
-    st.session_state['empresa_seleccionada'] = None
 
 # --- Función para formatear números en Bs ---
 def fmt_bs(valor):
@@ -205,27 +195,6 @@ def obtener_dolar_oficial():
 @st.cache_data(ttl=300)
 def get_dolar_con_cache():
     return obtener_dolar_oficial()
-
-# --- Cambiar temporalidad (1 Día, 1 Semana, 1 Mes) ---
-def cambiar_temporalidad(df, temporalidad):
-    df = df.copy()
-    df['Date'] = pd.to_datetime(df['Date'])
-    df.set_index('Date', inplace=True)
-    
-    if temporalidad == "1 Semana":
-        df_resampled = df.resample('W').agg({
-            'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-        }).dropna()
-    elif temporalidad == "1 Mes":
-        df_resampled = df.resample('ME').agg({
-            'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-        }).dropna()
-    else:
-        df_resampled = df.reset_index()
-        return df_resampled
-        
-    df_resampled.reset_index(inplace=True)
-    return df_resampled
 
 # -------------------------------------------------------------------
 # 1. FUNCIÓN QUE CALCULA TODOS LOS INDICADORES TÉCNICOS
@@ -272,247 +241,7 @@ def calcular_indicadores(df, lista_emas):
     true_range = np.max(ranges, axis=1)
     df['ATR14'] = true_range.rolling(14).mean()
 
-    ema12 = df['Close'].ewm(span=12, adjust=False).mean()
-    ema26 = df['Close'].ewm(span=26, adjust=False).mean()
-    df['MACD'] = ema12 - ema26
-    df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-    df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
-
-    tp = (df['High'] + df['Low'] + df['Close']) / 3
-    df['VWAP'] = (tp * df['Volume']).cumsum() / df['Volume'].cumsum() if 'Volume' in df.columns else tp
-
-    multiplier = 3
-    period = 10
-    hl2 = (df['High'] + df['Low']) / 2
-    df['ATR_ST'] = true_range.rolling(period).mean()
-    df['Basic_Upper'] = hl2 + (multiplier * df['ATR_ST'])
-    df['Basic_Lower'] = hl2 - (multiplier * df['ATR_ST'])
-    
-    supertrend = [0.0] * len(df)
-    direction = [1] * len(df)
-    for i in range(1, len(df)):
-        if df['Close'].iloc[i] > df['Basic_Upper'].iloc[i-1]:
-            direction[i] = 1
-        elif df['Close'].iloc[i] < df['Basic_Lower'].iloc[i-1]:
-            direction[i] = -1
-        else:
-            direction[i] = direction[i-1]
-            if direction[i] == 1 and df['Basic_Lower'].iloc[i] < df['Basic_Lower'].iloc[i-1]:
-                df.loc[i, 'Basic_Lower'] = df['Basic_Lower'].iloc[i-1]
-            if direction[i] == -1 and df['Basic_Upper'].iloc[i] > df['Basic_Upper'].iloc[i-1]:
-                df.loc[i, 'Basic_Upper'] = df['Basic_Upper'].iloc[i-1]
-        supertrend[i] = df['Basic_Lower'].iloc[i] if direction[i] == 1 else df['Basic_Upper'].iloc[i]
-    df['Supertrend'] = supertrend
-
-    psar = df['Close'].copy()
-    af = 0.02
-    max_af = 0.2
-    is_long = True
-    ep = df['High'].iloc[0]
-    sar = df['Low'].iloc[0]
-    
-    for i in range(2, len(df)):
-        if is_long:
-            sar = sar + af * (ep - sar)
-            sar = min(sar, df['Low'].iloc[i-1], df['Low'].iloc[i-2])
-            if df['Low'].iloc[i] < sar:
-                is_long = False
-                sar = ep
-                ep = df['Low'].iloc[i]
-                af = 0.02
-            else:
-                if df['High'].iloc[i] > ep:
-                    ep = df['High'].iloc[i]
-                    af = min(af + 0.02, max_af)
-        else:
-            sar = sar + af * (ep - sar)
-            sar = max(sar, df['High'].iloc[i-1], df['High'].iloc[i-2])
-            if df['High'].iloc[i] > sar:
-                is_long = True
-                sar = ep
-                ep = df['Low'].iloc[i]
-                af = 0.02
-            else:
-                if df['Low'].iloc[i] < ep:
-                    ep = df['Low'].iloc[i]
-                    af = min(af + 0.02, max_af)
-        psar.iloc[i] = sar
-    df['Parabolic_SAR'] = psar
-
     return df
-
-# -------------------------------------------------------------------
-# GRÁFICO TÉCNICO INTERACTIVO (LÓGICA TRADINGVIEW: SCROLL ZOOM / ESCALA Y)
-# -------------------------------------------------------------------
-def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
-    df_plot = df.copy()
-
-    subpaneles = [ind for ind in indicadores_seleccionados if ind in ["MACD", "RSI (14)"]]
-    num_subpaneles = len(subpaneles)
-
-    if num_subpaneles == 1:
-        fig = make_subplots(
-            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-            subplot_titles=('PRECIO', subpaneles[0]), row_width=[0.20, 0.80]
-        )
-    elif num_subpaneles >= 2:
-        fig = make_subplots(
-            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-            subplot_titles=('PRECIO', subpaneles[0], subpaneles[1]), row_width=[0.15, 0.15, 0.70]
-        )
-    else:
-        fig = make_subplots(
-            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-            subplot_titles=('PRECIO', 'VOLUMEN'), row_width=[0.20, 0.80]
-        )
-
-    fig.add_trace(go.Candlestick(
-        x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
-        name='Precio', increasing_line_color='#10b981', decreasing_line_color='#f43f5e',
-        increasing_fillcolor='#10b981', decreasing_fillcolor='#f43f5e'
-    ), row=1, col=1)
-
-    if "EMAs Personalizadas" in indicadores_seleccionados:
-        for item in lista_emas:
-            p = int(item['periodo'])
-            col = item['color']
-            col_name = f'EMA_{p}'
-            if col_name in df_plot.columns:
-                fig.add_trace(go.Scatter(
-                    x=df_plot['Date'], y=df_plot[col_name],
-                    line=dict(color=col, width=1.3),
-                    name=f'EMA {p}'
-                ), row=1, col=1)
-
-    if "Bandas Bollinger" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dot'), name='BB Sup'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dot'), name='BB Inf'), row=1, col=1)
-
-    if "Supertrend" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Supertrend'], mode='lines', line=dict(color='#a855f7', width=2), name='Supertrend'), row=1, col=1)
-
-    if "VWAP" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['VWAP'], line=dict(color='#3b82f6', width=1.5), name='VWAP'), row=1, col=1)
-
-    if "Parabolic SAR" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Parabolic_SAR'], mode='markers', marker=dict(color='#f97316', size=3), name='SAR'), row=1, col=1)
-
-    fila_actual = 2
-    if num_subpaneles == 0 and 'Volume' in df_plot.columns:
-        colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], 'rgba(16, 185, 129, 0.6)', 'rgba(244, 63, 94, 0.6)')
-        fig.add_trace(go.Bar(x=df_plot['Date'], y=df_plot['Volume'], marker_color=colores_volumen, name='Volumen'), row=fila_actual, col=1)
-    
-    for sub in subpaneles:
-        if sub == "MACD":
-            colores_hist = np.where(df_plot['MACD_Hist'] >= 0, 'rgba(16, 185, 129, 0.5)', 'rgba(244, 63, 94, 0.5)')
-            fig.add_trace(go.Bar(x=df_plot['Date'], y=df_plot['MACD_Hist'], marker_color=colores_hist, name='Hist'), row=fila_actual, col=1)
-            fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['MACD'], line=dict(color='#38bdf8', width=1.2), name='MACD'), row=fila_actual, col=1)
-            fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['MACD_Signal'], line=dict(color='#fb923c', width=1.2), name='Signal'), row=fila_actual, col=1)
-        elif sub == "RSI (14)":
-            fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['RSI'], line=dict(color='#facc15', width=1.5, shape='spline'), name='RSI'), row=fila_actual, col=1)
-            fig.add_hline(y=70, line_dash="dot", row=fila_actual, col=1, line_color="rgba(244, 63, 94, 0.5)")
-            fig.add_hline(y=30, line_dash="dot", row=fila_actual, col=1, line_color="rgba(16, 185, 129, 0.5)")
-        fila_actual += 1
-
-    fig.update_layout(
-        height=850, 
-        paper_bgcolor='#0b1120',
-        plot_bgcolor='#0b1120',
-        xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=25, b=10),
-        hovermode='x unified',
-        dragmode='pan',
-        showlegend=False
-    )
-    
-    # Comportamiento exacto TradingView: Zoom por scroll y escalado libre en eje Y
-    fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False, fixedrange=False)
-    fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False, fixedrange=False)
-    
-    return fig
-
-# -------------------------------------------------------------------
-# VISTA: TERMINAL ANALÍTICO GRÁFICO (PESTAÑA NUEVA)
-# -------------------------------------------------------------------
-def renderizar_vista_grafico(datos_empresa):
-    if st.button("⬅️ Volver al Panel Principal"):
-        st.session_state['empresa_seleccionada'] = None
-        st.rerun()
-
-    dolar, _ = get_dolar_con_cache()
-    precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
-    
-    st.markdown(f"""
-    <div class="hero-container" style="margin-bottom: 20px;">
-        <div>
-            <span class="main-title" style="font-size: 1.8rem;">📊 Terminal Gráfico: {datos_empresa['nombre']}</span>
-            <span style="margin-left: 10px;" class="card-badge">{datos_empresa['estado']}</span>
-        </div>
-        <div style="display: flex; gap: 25px;">
-            <div>
-                <div class="metric-label">Precio Bs</div>
-                <div class="metric-value" style="font-size: 1.1rem;">{fmt_bs(datos_empresa['precio'])}</div>
-            </div>
-            <div>
-                <div class="metric-label">Precio USD</div>
-                <div class="metric-value" style="font-size: 1.1rem;">${precio_usd:.4f}</div>
-            </div>
-            <div>
-                <div class="metric-label">Upside</div>
-                <div class="metric-value" style="font-size: 1.1rem; color: #4ade80;">+{datos_empresa['upside']:.1f}%</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_temp, col_ind = st.columns([1, 2])
-    with col_temp:
-        temporalidad = st.radio("Temporalidad", ["1 Día", "1 Semana", "1 Mes"], horizontal=True, label_visibility="collapsed")
-
-    with col_ind:
-        st.session_state['indicadores_activos'] = [
-            ind for ind in st.session_state['indicadores_activos'] if ind in OPCIONES_INDICADORES
-        ]
-        
-        indicadores_seleccionados = st.multiselect(
-            "Seleccionar Indicadores:",
-            OPCIONES_INDICADORES,
-            default=st.session_state['indicadores_activos'],
-            placeholder="Añadir indicadores técnicos..."
-        )
-        st.session_state['indicadores_activos'] = indicadores_seleccionados
-
-    if "EMAs Personalizadas" in indicadores_seleccionados:
-        with st.expander("⚙️ Configurar EMAs (Períodos y Colores)", expanded=False):
-            nuevas_emas = []
-            cols_emas = st.columns(len(st.session_state['lista_emas']) + 1)
-            
-            for idx, item in enumerate(st.session_state['lista_emas']):
-                with cols_emas[idx]:
-                    p = st.number_input(f"EMA #{idx+1}", min_value=1, max_value=500, value=int(item['periodo']), key=f"ema_p_{idx}")
-                    c = st.color_picker(f"Color #{idx+1}", value=item['color'], key=f"ema_c_{idx}")
-                    nuevas_emas.append({"periodo": p, "color": c})
-            
-            with cols_emas[-1]:
-                st.write("")
-                st.write("")
-                if st.button("➕ Añadir EMA"):
-                    nuevas_emas.append({"periodo": 50, "color": "#22c55e"})
-                    st.session_state['lista_emas'] = nuevas_emas
-                    st.rerun()
-            
-            st.session_state['lista_emas'] = nuevas_emas
-
-    df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
-    df_indicadores = calcular_indicadores(df_convertido, st.session_state['lista_emas'])
-    
-    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad, indicadores_seleccionados, st.session_state['lista_emas'])
-    
-    st.plotly_chart(
-        fig, 
-        use_container_width=True, 
-        config={'scrollZoom': True, 'displayModeBar': False}
-    )
 
 # -------------------------------------------------------------------
 # 2. FUNCIÓN QUE ANALIZA CADA ARCHIVO (ORIGINAL BVC)
@@ -680,7 +409,7 @@ if st.sidebar.button("🔍 Analizar Carpeta", use_container_width=True, type="pr
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("No se encontraron archivos .csv en la carpeta `./datos_bvc`.")
+            st.warning("No se encontraron archivos .csv em la carpeta `./datos_bvc`.")
         else:
             resultados = []
             with st.spinner(f"Analizando {len(archivos)} archivos hasta {fecha_referencia.strftime('%Y-%m-%d')}..."):
@@ -695,103 +424,82 @@ if st.sidebar.button("🔍 Analizar Carpeta", use_container_width=True, type="pr
             else:
                 st.session_state['resultados'] = resultados
 
-# --- RENDERIZADO PRINCIPAL O VISTA DE GRÁFICO EN PESTAÑA NUEVA ---
-if st.session_state['empresa_seleccionada'] is not None:
-    renderizar_vista_grafico(st.session_state['empresa_seleccionada'])
-else:
-    # Mostrar resultados si están en session_state
-    if 'resultados' in st.session_state and st.session_state['resultados']:
-        df_resultados = pd.DataFrame(st.session_state['resultados'])
-        
-        df_activos = df_resultados[~df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
-        if not df_activos.empty:
-            df_activos = df_activos.sort_values('puntaje', ascending=False)
+# Mostrar resultados si están en session_state
+if 'resultados' in st.session_state and st.session_state['resultados']:
+    df_resultados = pd.DataFrame(st.session_state['resultados'])
+    
+    df_activos = df_resultados[~df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
+    if not df_activos.empty:
+        df_activos = df_activos.sort_values('puntaje', ascending=False)
 
-            dolar, _ = get_dolar_con_cache()
-            if dolar > 0:
-                df_activos['precio_usd'] = df_activos['precio'] / dolar
+        dolar, _ = get_dolar_con_cache()
+        if dolar > 0:
+            df_activos['precio_usd'] = df_activos['precio'] / dolar
 
-                total_compras = len(df_activos[df_activos['estado'].str.contains('COMPRA', case=False, na=False)])
-                top_accion = df_activos.sort_values('puntaje', ascending=False).iloc[0]
+            total_compras = len(df_activos[df_activos['estado'].str.contains('COMPRA', case=False, na=False)])
+            top_accion = df_activos.sort_values('puntaje', ascending=False).iloc[0]
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            kpi1, kpi2, kpi3 = st.columns(3)
+            with kpi1:
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-title">Oportunidades de Compra</div>
+                    <div class="kpi-value" style="color: #4ade80;">{total_compras} Acciones</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi2:
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-title">Top Oportunidad #1</div>
+                    <div class="kpi-value" style="color: #facc15; font-size: 1.4rem;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi3:
+                st.markdown(f"""
+                <div class="kpi-card">
+                    <div class="kpi-title">Máximo Upside Estimado</div>
+                    <div class="kpi-value" style="color: #38bdf8;">+{top_accion['upside']:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            def mostrar_tabla_interactiva(df, titulo, clave_tabla):
+                if df.empty:
+                    return
                 
-                st.markdown("<br>", unsafe_allow_html=True)
-                kpi1, kpi2, kpi3 = st.columns(3)
-                with kpi1:
-                    st.markdown(f"""
-                    <div class="kpi-card">
-                        <div class="kpi-title">Oportunidades de Compra</div>
-                        <div class="kpi-value" style="color: #4ade80;">{total_compras} Acciones</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with kpi2:
-                    st.markdown(f"""
-                    <div class="kpi-card">
-                        <div class="kpi-title">Top Oportunidad #1</div>
-                        <div class="kpi-value" style="color: #facc15; font-size: 1.4rem;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with kpi3:
-                    st.markdown(f"""
-                    <div class="kpi-card">
-                        <div class="kpi-title">Máximo Upside Estimado</div>
-                        <div class="kpi-value" style="color: #38bdf8;">+{top_accion['upside']:.1f}%</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                df_display = df.copy()
+                df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
+                
+                columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
+                
+                st.markdown(f"""
+                <div class="section-header">
+                    <span>📈 {titulo}</span> 
+                    <span style="font-size: 0.85rem; font-weight: 500; color: #64748b;">({len(df)} empresas)</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.dataframe(
+                    df_display[columnas_mostrar], 
+                    use_container_width=True, 
+                    hide_index=True,
+                    height=min(450, (len(df) + 1) * 38 + 12),
+                    column_config={
+                        "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                        "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
+                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="small"),
+                        "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
+                        "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
+                        "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
+                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
+                    }
+                )
 
-                st.markdown("<br>", unsafe_allow_html=True)
+            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
+            st.markdown("<br>", unsafe_allow_html=True)
+            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
 
-                def mostrar_tabla_interactiva(df, titulo, clave_tabla):
-                    if df.empty:
-                        return
-                    
-                    df_display = df.copy()
-                    df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
-                    
-                    columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
-                    
-                    st.markdown(f"""
-                    <div class="section-header">
-                        <span>📈 {titulo}</span> 
-                        <span style="font-size: 0.85rem; font-weight: 500; color: #64748b;">({len(df)} empresas)</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    evento = st.dataframe(
-                        df_display[columnas_mostrar], 
-                        use_container_width=True, 
-                        hide_index=True,
-                        height=min(450, (len(df) + 1) * 38 + 12),
-                        selection_mode="single-row",
-                        on_select="rerun",
-                        key=clave_tabla,
-                        column_config={
-                            "Ticker": st.column_config.Column(
-                                "Ticker", 
-                                help="Haz clic en cualquier Ticker para abrir el gráfico analítico en pestaña completa",
-                                width="small"
-                            ),
-                            "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
-                            "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="small"),
-                            "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
-                            "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
-                            "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
-                            "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
-                        }
-                    )
-                    
-                    if evento:
-                        filas_seleccionadas = evento.get("selection", {}).get("rows", [])
-                        if filas_seleccionadas:
-                            indice_fila = filas_seleccionadas[0]
-                            nombre_empresa_tocada = df_display.iloc[indice_fila]['Ticker']
-                            datos_empresa = next((item for item in st.session_state['resultados'] if item["nombre"] == nombre_empresa_tocada), None)
-                            if datos_empresa:
-                                st.session_state['empresa_seleccionada'] = datos_empresa
-                                st.rerun()
-
-                mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
-                st.markdown("<br>", unsafe_allow_html=True)
-                mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
-
-    else:
-        st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
+else:
+    st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
