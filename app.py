@@ -349,7 +349,7 @@ def calcular_indicadores(df, lista_emas):
     return df
 
 # -------------------------------------------------------------------
-# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY) - TODAS LAS VELAS (df.copy())
+# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY) - TODAS LAS VELAS CON ZOOM DE PRECIOS TIPO TRADINGVIEW
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
     df_plot = df.copy()
@@ -432,8 +432,9 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
         showlegend=False
     )
     
-    fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
+    # Habilitar zoom independiente en Y (tipo TradingView al hacer scroll o arrastrar el eje de precios)
+    fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False, fixedrange=False)
+    fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False, fixedrange=False)
     
     return fig
 
