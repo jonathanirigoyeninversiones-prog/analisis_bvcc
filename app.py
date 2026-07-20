@@ -112,12 +112,6 @@ if 'lista_emas' not in st.session_state:
         {"periodo": 200, "color": "#a855f7"}
     ]
 
-if 'analizado' not in st.session_state:
-    st.session_state['analizado'] = False
-
-if 'resultados' not in st.session_state:
-    st.session_state['resultados'] = []
-
 def fmt_bs(valor):
     if pd.isna(valor) or valor is None:
         return "0,00"
@@ -558,12 +552,7 @@ if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
             st.sidebar.error(f"Error: {e}")
 
 st.sidebar.divider()
-
-# Corrección estructural del botón: Se usa una callback o control directo por estado para evitar que se pierda la ejecución
-def ejecutar_analisis():
-    st.session_state['analizado'] = True
-
-btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary", on_click=ejecutar_analisis)
+btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary")
 
 col_titulo, col_dolar = st.columns([2, 1])
 
@@ -587,7 +576,7 @@ with col_dolar:
 
 carpeta = "./datos_bvc"
 
-if st.session_state['analizado']:
+if btn_analizar:
     if not os.path.exists(carpeta):
         st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC'.")
     else:
@@ -605,8 +594,9 @@ if st.session_state['analizado']:
 
             if resultados:
                 st.session_state['resultados'] = resultados
+                st.session_state['analizado'] = True
 
-if st.session_state['analizado'] and st.session_state['resultados']:
+if st.session_state.get('analizado', False):
     resultados = st.session_state['resultados']
     df_resultados = pd.DataFrame(resultados)
     
