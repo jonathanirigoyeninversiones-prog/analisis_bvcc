@@ -112,7 +112,7 @@ def calcular_indicadores(df):
     rs = avg_gain / avg_loss
     rsi_raw = 100 - (100 / (1 + rs))
     
-    # --- SUAVIZADO DEL RSI PARA EVITAR LÍNEAS RECTAS Y PLANAS ---
+    # --- SUAVIZADO DEL RSI PARA CURVAS FLUIDAS ---
     df['RSI'] = rsi_raw.ewm(span=3, adjust=False).mean()
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
@@ -137,7 +137,7 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. GENERAR GRÁFICA INTERACTIVA CON NAVEGACIÓN TIPO TRADINGVIEW
+# 3. GENERAR GRÁFICA INTERACTIVA
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(120).copy()
@@ -186,7 +186,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     # 3. RSI Amarillo Suavizado
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['RSI'],
-        line=dict(color='#facc15', width=2, shape='spline'), # CURVA FLUIDA Y SUAVE
+        line=dict(color='#facc15', width=2, shape='spline'),
         name='RSI 14'
     ), row=3, col=1)
     
@@ -199,7 +199,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         xaxis_rangeslider_visible=False,
         margin=dict(l=20, r=20, t=40, b=20),
         hovermode='x unified',
-        dragmode='pan', # CLIC Y ARRASTRE PARA MOVER LA GRÁFICA
+        dragmode='pan',
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
@@ -333,7 +333,6 @@ def mostrar_modal_grafico(datos_empresa):
     df_indicadores = calcular_indicadores(df_convertido)
     fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad)
     
-    # CONFIGURAMOS ZOOM CON RUEDA DE RATÓN Y DESPLAZAMIENTO POR ARRASTRE
     st.plotly_chart(
         fig, 
         use_container_width=True, 
@@ -425,7 +424,7 @@ if st.session_state.get('analizado', False):
         df_menos_1 = df_resultados[df_resultados['precio_usd'] < 1].sort_values('puntaje', ascending=False)
         df_mas_1 = df_resultados[df_resultados['precio_usd'] >= 1].sort_values('puntaje', ascending=False)
 
-        def mostrar_tabla(df, titulo):
+        def mostrar_tabla_interactiva(df, titulo, clave_tabla):
             if df.empty:
                 return
             
@@ -440,23 +439,32 @@ if st.session_state.get('analizado', False):
             columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'rsi', 'ema30', 'ema60']
             
             st.subheader(f"📊 {titulo} ({len(df)} acciones)")
-            st.dataframe(df_display[columnas], use_container_width=True, hide_index=True)
+            st.caption("💡 Haz clic sobre cualquier fila para abrir la gráfica técnica de la empresa.")
+            
+            # TABLA INTERACTIVA CON SELECCIÓN
+            evento = st.dataframe(
+                df_display[columnas], 
+                use_container_width=True, 
+                hide_index=True,
+                selection_mode="single-row",
+                on_select="rerun",
+                key=clave_tabla
+            )
+            
+            # SI EL USUARIO HACE CLIC EN UNA FILA, ABRIR MODAL
+            filas_seleccionadas = evento.selection.get("rows", [])
+            if filas_seleccionadas:
+                indice_fila = filas_seleccionadas[0]
+                nombre_empresa_tocada = df_display.iloc[indice_fila]['nombre']
+                datos_empresa = next((item for item in resultados if item["nombre"] == nombre_empresa_tocada), None)
+                if datos_empresa:
+                    st.session_state['empresa_modal'] = datos_empresa
 
         st.subheader(f"📈 Top Oportunidades - Referencia: {fecha_referencia.strftime('%Y-%m-%d')}")
-        mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
-        mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
-
-        # --- SELECTOR DIRECTO PARA ABRIR MODAL DESDE LOS CSV ---
-        st.divider()
-        st.subheader("🔍 Abrir Gráficos del Mercado")
         
-        lista_empresas = sorted([r['nombre'] for r in resultados])
-        empresa_elegida = st.selectbox("Selecciona cualquier empresa para desplegar su gráfico flotante:", ["-- Selecciona una empresa --"] + lista_empresas)
-
-        if empresa_elegida != "-- Selecciona una empresa --":
-            datos_empresa = next((item for item in resultados if item["nombre"] == empresa_elegida), None)
-            if datos_empresa:
-                st.session_state['empresa_modal'] = datos_empresa
+        # TABLAS INTERACTIVAS CON DICCIONARIO INDEPENDIENTE
+        mostrar_tabla_interactiva(df_menos_1, "🔽 Menos de 1 USD", "tabla_menos_1")
+        mostrar_tabla_interactiva(df_mas_1, "🔼 Mayor o igual a 1 USD", "tabla_mas_1")
 
         # EJECUCIÓN DEL MODAL FLOTANTE
         if st.session_state['empresa_modal'] is not None:
