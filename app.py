@@ -39,7 +39,7 @@ st.markdown("""
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
     }
 
-    /* Contenedor fluido sin desbordamientos horizontales */
+    /* Contenedor fluido sin desbordamientos horizontales y altura dinámica completa */
     div[data-testid="stDataFrame"] {
         width: 100% !important;
         background: rgba(15, 23, 42, 0.6);
@@ -51,6 +51,7 @@ st.markdown("""
     div[data-testid="stDataFrame"] > div {
         width: 100% !important;
         overflow-x: hidden !important;
+        max-height: none !important;
     }
 
     /* Tarjetas de Encabezado Glassmorphism */
@@ -409,7 +410,7 @@ if st.sidebar.button("🔍 Analizar Carpeta", use_container_width=True, type="pr
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("No se encontraron archivos .csv em la carpeta `./datos_bvc`.")
+            st.warning("No se encontraron archivos .csv en la carpeta `./datos_bvc`.")
         else:
             resultados = []
             with st.spinner(f"Analizando {len(archivos)} archivos hasta {fecha_referencia.strftime('%Y-%m-%d')}..."):
@@ -481,11 +482,14 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # Altura calculada dinámicamente para desplegar todas las filas sin scroll interno
+                altura_total = (len(df) + 1) * 38 + 15
+                
                 st.dataframe(
                     df_display[columnas_mostrar], 
                     use_container_width=True, 
                     hide_index=True,
-                    height=min(450, (len(df) + 1) * 38 + 12),
+                    height=altura_total,
                     column_config={
                         "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
