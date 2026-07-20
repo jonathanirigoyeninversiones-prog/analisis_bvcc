@@ -767,7 +767,11 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                     on_select="rerun",
                     key=clave_tabla,
                     column_config={
-                        "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                        "Ticker": st.column_config.Column(
+                            "Ticker", 
+                            help="Haz clic en cualquier Ticker para abrir el gráfico analítico",
+                            width="small"
+                        ),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
                         "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="small"),
                         "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
