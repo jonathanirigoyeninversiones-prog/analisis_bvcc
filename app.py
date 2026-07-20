@@ -61,48 +61,6 @@ def obtener_dolar_oficial():
 def get_dolar_con_cache():
     return obtener_dolar_oficial()
 
-# --- Cabecera ---
-col_titulo, col_dolar = st.columns([2, 1])
-
-with col_titulo:
-    st.title("📊 Analizador de Oportunidades BVC")
-    st.markdown("**Estrategia sin volumen** - Basado únicamente en Precio, EMA, RSI y ATR.")
-
-with col_dolar:
-    with st.spinner("Cargando dólar..."):
-        dolar_oficial, fecha_dolar = get_dolar_con_cache()
-        if dolar_oficial > 0:
-            st.markdown(f"""
-            <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
-                <p style="margin: 0; font-weight: 700; font-size: 1.2rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
-                    💵 Precio $ BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
-                </p>
-                <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
-                    Actualizado: {fecha_dolar}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-            <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
-                <p style="margin: 0; font-weight: 600; font-size: 1.0rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
-                    ⚠️ Precio $ BCV: No disponible
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-# --- Filtros ---
-st.markdown("""
-**Filtros actuales (Sin Volumen):**  
-1️⃣ **Tendencia (EMA 30 < EMA 60)** → +25 pts si está barata.  
-2️⃣ **Distancia a EMA 60** → Hasta +40 pts si está muy por debajo.  
-3️⃣ **Banda de Bollinger** → +15 pts si toca el suelo.  
-4️⃣ **RSI (Nivel)** → Hasta +10 pts si está cerca de 30.  
-5️⃣ **RSI (Pendiente)** → +10 pts si está subiendo y en sobreventa.  
-6️⃣ **Potencial ATR** → +10 pts si subida >20%, +5 pts si >10%.  
-7️⃣ **Bonus EMA 100** → +5 pts si está por debajo.
-""")
-
 # -------------------------------------------------------------------
 # 1. FUNCIÓN DE AGRUPACIÓN POR TEMPORALIDAD
 # -------------------------------------------------------------------
@@ -135,7 +93,7 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# 2. CÁLCULO DE INDICADORES (INCLUYE MA 20 DE VOLUMEN)
+# 2. CÁLCULO DE INDICADORES
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -164,7 +122,6 @@ def calcular_indicadores(df):
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
 
-    # --- MA 20 para el Volumen ---
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
     high_low = df['High'] - df['Low']
@@ -177,7 +134,7 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA PERSONALIZADA
+# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(90).copy()
@@ -190,7 +147,6 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         row_width=[0.22, 0.18, 0.60]
     )
 
-    # 1. VELAS JAPONESAS (Fila 1)
     fig.add_trace(go.Candlestick(
         x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
         name='Precio (Bs)',
@@ -203,33 +159,28 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
 
-    # 2. VOLUMEN CON ÁREA GRIS (30% OPACIDAD) Y MA 20 (Fila 2)
-    # Área de fondo gris al 30%
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Volume'],
         fill='tozeroy',
-        fillcolor='rgba(128, 128, 128, 0.3)', # Gris con 30% opacidad
+        fillcolor='rgba(128, 128, 128, 0.3)',
         line=dict(color='rgba(128, 128, 128, 0.5)', width=1),
         name='Área Volumen'
     ), row=2, col=1)
 
-    # Barras de volumen
     colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], '#22c55e', '#ef4444')
     fig.add_trace(go.Bar(
         x=df_plot['Date'], y=df_plot['Volume'],
         marker_color=colores_volumen, name='Volumen', opacity=0.7
     ), row=2, col=1)
 
-    # Línea de MA 20 de Volumen
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Vol_MA20'],
         line=dict(color='#f59e0b', width=1.5), name='Vol MA 20'
     ), row=2, col=1)
 
-    # 3. RSI COLOR AMARILLO (Fila 3)
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['RSI'],
-        line=dict(color='#facc15', width=2), # Color Amarillo
+        line=dict(color='#facc15', width=2),
         name='RSI 14'
     ), row=3, col=1)
     
@@ -237,10 +188,10 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
 
     fig.update_layout(
-        height=780, 
+        height=720, 
         template='plotly_dark', 
         xaxis_rangeslider_visible=False,
-        margin=dict(l=40, r=40, t=50, b=30),
+        margin=dict(l=20, r=20, t=40, b=20),
         hovermode='x unified',
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -362,17 +313,35 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         return None
 
 # -------------------------------------------------------------------
-# 5. INTERFAZ DE USUARIO
+# 5. CONTROLADOR DEL MODAL FLOTANTE A PANTALLA COMPLETA
 # -------------------------------------------------------------------
-st.sidebar.header("⚙️ Configuración")
+if 'empresa_modal' not in st.session_state:
+    st.session_state['empresa_modal'] = None
 
-carpeta = st.sidebar.text_input("📁 Ruta de la carpeta con tus CSV", value="./datos_bvc")
+@st.dialog("📊 Gráfico Técnico Avanzado", width="large")
+def mostrar_modal_grafico(datos_empresa):
+    col_vacia, col_boton = st.columns([5, 1])
+    with col_boton:
+        if st.button("⬅️ Volver", use_container_width=True, type="primary"):
+            st.session_state['empresa_modal'] = None
+            st.rerun()
 
+    temporalidad = st.radio("Temporalidad:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
+
+    df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
+    df_indicadores = calcular_indicadores(df_convertido)
+    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad)
+    st.plotly_chart(fig, use_container_width=True)
+
+# -------------------------------------------------------------------
+# 6. INTERFAZ PRINCIPAL
+# -------------------------------------------------------------------
+# --- BARRA LATERAL LIMPIA SIN RUTA CSV ---
+st.sidebar.subheader("📥 Datos de la Bolsa")
 fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
 
 st.sidebar.divider()
-st.sidebar.subheader("📥 Datos en la Nube")
-if st.sidebar.button("🔄 Actualizar Historial BVC"):
+if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
     with st.spinner("Descargando datos históricos..."):
         try:
             subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
@@ -380,18 +349,56 @@ if st.sidebar.button("🔄 Actualizar Historial BVC"):
             st.rerun()
         except Exception as e:
             st.sidebar.error(f"Error: {e}")
-st.sidebar.divider()
 
-if st.sidebar.button("🔍 Analizar Carpeta"):
+st.sidebar.divider()
+btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary")
+
+# --- CABECERA PRINCIPAL ---
+col_titulo, col_dolar = st.columns([2, 1])
+
+with col_titulo:
+    st.title("📊 Analizador de Oportunidades BVC")
+    st.markdown("**Estrategia sin volumen** - Basado únicamente en Precio, EMA, RSI y ATR.")
+
+with col_dolar:
+    with st.spinner("Cargando dólar..."):
+        dolar_oficial, fecha_dolar = get_dolar_con_cache()
+        if dolar_oficial > 0:
+            st.markdown(f"""
+            <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
+                <p style="margin: 0; font-weight: 700; font-size: 1.2rem; color: #facc15; text-shadow: 0 0 8px rgba(250, 204, 21, 0.3);">
+                    💵 Precio $ BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
+                </p>
+                <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
+                    Actualizado: {fecha_dolar}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+# --- FILTROS ---
+st.markdown("""
+**Filtros actuales (Sin Volumen):**  
+1️⃣ **Tendencia (EMA 30 < EMA 60)** → +25 pts si está barata.  
+2️⃣ **Distancia a EMA 60** → Hasta +40 pts si está muy por debajo.  
+3️⃣ **Banda de Bollinger** → +15 pts si toca el suelo.  
+4️⃣ **RSI (Nivel)** → Hasta +10 pts si está cerca de 30.  
+5️⃣ **RSI (Pendiente)** → +10 pts si está subiendo y en sobreventa.  
+6️⃣ **Potencial ATR** → +10 pts si subida >20%, +5 pts si >10%.  
+7️⃣ **Bonus EMA 100** → +5 pts si está por debajo.
+""")
+
+carpeta = "./datos_bvc"
+
+if btn_analizar:
     if not os.path.exists(carpeta):
-        st.error("⚠️ La ruta no existe. Primero presiona 'Actualizar Historial BVC'.")
+        st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC' para descargar el mercado.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("La carpeta está vacía.")
+            st.warning("No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
         else:
             resultados = []
-            with st.spinner("Procesando datos..."):
+            with st.spinner("Procesando todas las empresas del mercado..."):
                 for archivo in archivos:
                     res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
                     if res:
@@ -415,6 +422,7 @@ if st.session_state.get('analizado', False):
         def mostrar_tabla(df, titulo):
             if df.empty:
                 return
+            
             df_display = df.copy()
             df_display = df_display.rename(columns={'estado': 'Recomendado'})
             for col in ['precio', 'target', 'ema30', 'ema60']:
@@ -424,6 +432,7 @@ if st.session_state.get('analizado', False):
             df_display['rsi'] = df_display['rsi'].apply(lambda x: f"{x:.2f}")
 
             columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'rsi', 'ema30', 'ema60']
+            
             st.subheader(f"📊 {titulo} ({len(df)} acciones)")
             st.dataframe(df_display[columnas], use_container_width=True, hide_index=True)
 
@@ -431,26 +440,21 @@ if st.session_state.get('analizado', False):
         mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
         mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-        # --- SECCIÓN DE GRÁFICO INTERACTIVO ---
+        # --- SELECTOR DIRECTO PARA ABRIR MODAL PANTALLA COMPLETA ---
         st.divider()
-        st.subheader("📈 Analizador Gráfico de Acción Multi-Temporalidad")
+        st.subheader("🔍 Abrir Gráficos del Mercado")
         
-        col_selec, col_temp = st.columns([2, 1])
-        
-        with col_selec:
-            lista_empresas = sorted([r['nombre'] for r in resultados])
-            empresa_seleccionada = st.selectbox("Selecciona una empresa para analizar:", lista_empresas)
-            
-        with col_temp:
-            temporalidad = st.radio("Temporalidad del gráfico:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
+        lista_empresas = sorted([r['nombre'] for r in resultados])
+        empresa_elegida = st.selectbox("Selecciona cualquier empresa para desplegar su gráfico flotante:", ["-- Selecciona una empresa --"] + lista_empresas)
 
-        datos_empresa = next((item for item in resultados if item["nombre"] == empresa_seleccionada), None)
+        if empresa_elegida != "-- Selecciona una empresa --":
+            datos_empresa = next((item for item in resultados if item["nombre"] == empresa_elegida), None)
+            if datos_empresa:
+                st.session_state['empresa_modal'] = datos_empresa
 
-        if datos_empresa:
-            df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
-            df_indicadores = calcular_indicadores(df_convertido)
-            fig = generar_grafico_tecnico(df_indicadores, empresa_seleccionada, temporalidad)
-            st.plotly_chart(fig, use_container_width=True)
+        # EJECUCIÓN DEL MODAL FLOTANTE
+        if st.session_state['empresa_modal'] is not None:
+            mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
-    st.info("👈 Configura la ruta de tu carpeta, selecciona una fecha y presiona 'Analizar Carpeta'.")
+    st.info("👈 Presiona 'Analizar Mercado' en el menú lateral para cargar las tablas de oportunidades.")
