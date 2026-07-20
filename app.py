@@ -495,8 +495,8 @@ if st.session_state.get('analizado', False):
             df_display['precio_usd'] = df_display['precio_usd'].apply(lambda x: f"{x:.4f}")
             df_display['upside'] = df_display['upside'].apply(lambda x: f"{x:.2f}%")
 
-            # COLUMNAS LIMPIAS (SIN RSI, EMA30, EMA60)
-            columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
+            # COLUMNAS LIMPIAS (SIN FECHA ULTIMO, RSI, EMA30, EMA60)
+            columnas = ['nombre', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
             
             st.subheader(f"📊 {titulo} ({len(df)} acciones)")
             st.caption("💡 Haz clic en una fila para desplegar la analítica de la empresa.")
