@@ -35,11 +35,14 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* FORZAR ANCHO TOTAL EN LAS TABLAS DE DATOS */
-    [data-testid="stDataFrame"] {
+    /* FORZAR ANCHO TOTAL ABSOLUTO EN LAS TABLAS DE DATOS */
+    div[data-testid="stDataFrame"] {
         width: 100% !important;
     }
-    [data-testid="stDataFrame"] > div {
+    div[data-testid="stDataFrame"] > div {
+        width: 100% !important;
+    }
+    div[data-testid="stDataFrame"] table {
         width: 100% !important;
     }
 
@@ -667,6 +670,7 @@ if st.session_state.get('analizado', False):
             
             st.subheader(f"📊 {titulo} ({len(df)} empresas)")
             
+            # Se eliminó la limitación fija de columnas para que el componente nativo de Streamlit ajuste dinámicamente el ancho de la tabla a la pantalla completa sin requerir desplazamiento horizontal.
             st.dataframe(
                 df_display[columnas], 
                 use_container_width=True, 
@@ -676,15 +680,14 @@ if st.session_state.get('analizado', False):
                 on_select="rerun",
                 key=clave_tabla,
                 column_config={
-                    "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción", width="small"),
-                    "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
+                    "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción"),
+                    "Recomendación": st.column_config.TextColumn("Recomendación"),
                     "Puntaje": st.column_config.ProgressColumn(
                         "Score Cuantitativo",
                         help="Puntaje asignado por el algoritmo",
                         format="%f pts",
                         min_value=0,
-                        max_value=100,
-                        width="medium"
+                        max_value=100
                     ),
                     "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
                     "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
