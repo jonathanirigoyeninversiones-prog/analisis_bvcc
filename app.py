@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (ANCHO TOTAL Y SCROLL HORIZONTAL FLUIDO)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (ANCHO TOTAL Y SCROLL VISIBLE)
 st.markdown("""
 <style>
     .stApp {
@@ -44,11 +44,10 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* Forzar ancho completo de la tabla eliminando restricciones fijas de Streamlit */
-    .stDataFrame {
+    /* Forzar que el dataframe ocupe todo el ancho y permita desplazamiento fluido */
+    div[data-testid="stDataFrame"] {
         width: 100% !important;
     }
-    
     div[data-testid="stDataFrame"] > div {
         width: 100% !important;
         overflow-x: auto !important;
@@ -708,49 +707,34 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                     return
                 
                 df_display = df.copy()
-                df_display = df_display.rename(columns={'estado': 'Recomendado'})
+                df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
                 
-                # Columnas limpias y ordenadas que entran perfectamente en pantalla
-                columnas_mostrar = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
+                # Columnas ordenadas de manera compacta para evitar desplazamientos ocultos
+                columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'fecha_ultimo']
                 
                 st.subheader(f"📊 {titulo} ({len(df)} empresas)")
                 
-                st.dataframe(
+                # Usamos use_container_width=True sin selección por checkboxes laterales para liberar espacio horizontal completo
+                event = st.dataframe(
                     df_display[columnas_mostrar], 
                     use_container_width=True, 
                     hide_index=True,
                     height=min(480, (len(df) + 1) * 35 + 10),
-                    selection_mode="single-row",
-                    on_select="rerun",
-                    key=clave_tabla,
                     column_config={
-                        "nombre": st.column_config.TextColumn("Ticker", width="small"),
-                        "fecha_ultimo": st.column_config.TextColumn("Último Día", width="medium"),
+                        "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
                         "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="medium"),
                         "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
                         "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
                         "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
-                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
+                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small"),
+                        "fecha_ultimo": st.column_config.TextColumn("Último Día", width="small")
                     }
                 )
-                
-                evento = st.session_state.get(clave_tabla)
-                if evento:
-                    filas_seleccionadas = evento.get("selection", {}).get("rows", [])
-                    if filas_seleccionadas:
-                        indice_fila = filas_seleccionadas[0]
-                        nombre_empresa_tocada = df_display.iloc[indice_fila]['nombre']
-                        datos_empresa = next((item for item in st.session_state['resultados'] if item["nombre"] == nombre_empresa_tocada), None)
-                        if datos_empresa:
-                            st.session_state['empresa_modal'] = datos_empresa
 
             mostrar_tabla_interactiva(df_menos_1, "Acciones Menores a 1 USD", "tabla_menos_1")
             st.markdown("<br>", unsafe_allow_html=True)
             mostrar_tabla_interactiva(df_mas_1, "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
-
-            if st.session_state['empresa_modal'] is not None:
-                mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
     st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
