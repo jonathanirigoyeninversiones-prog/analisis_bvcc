@@ -41,13 +41,6 @@ st.markdown("""
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
     }
 
-    div[role="dialog"] {
-        background-color: #0b1120 !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 20px !important;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
-    }
-
     /* Contenedor fluido sin desbordamientos horizontales */
     div[data-testid="stDataFrame"] {
         width: 100% !important;
@@ -173,8 +166,8 @@ if 'lista_emas' not in st.session_state:
         {"periodo": 200, "color": "#a855f7"}
     ]
 
-if 'empresa_modal' not in st.session_state:
-    st.session_state['empresa_modal'] = None
+if 'empresa_seleccionada' not in st.session_state:
+    st.session_state['empresa_seleccionada'] = None
 
 # --- Función para formatear números en Bs ---
 def fmt_bs(valor):
@@ -349,7 +342,7 @@ def calcular_indicadores(df, lista_emas):
     return df
 
 # -------------------------------------------------------------------
-# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY) - TODAS LAS VELAS CON ZOOM TIPO TRADINGVIEW
+# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY)
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
     df_plot = df.copy()
@@ -438,17 +431,20 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
     return fig
 
 # -------------------------------------------------------------------
-# MODAL / DIÁLOGO GRÁFICO PROFESIONAL
+# VISTA: TERMINAL ANALÍTICO GRÁFICO (PESTAÑA NUEVA)
 # -------------------------------------------------------------------
-@st.dialog("📊 Terminal Analítico Gráfico", width="large")
-def mostrar_modal_grafico(datos_empresa):
+def renderizar_vista_grafico(datos_empresa):
+    if st.button("⬅️ Volver al Panel Principal"):
+        st.session_state['empresa_seleccionada'] = None
+        st.rerun()
+
     dolar, _ = get_dolar_con_cache()
     precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
     
     st.markdown(f"""
     <div class="hero-container" style="margin-bottom: 20px;">
         <div>
-            <span class="main-title" style="font-size: 1.5rem;">{datos_empresa['nombre']}</span>
+            <span class="main-title" style="font-size: 1.8rem;">📊 Terminal Gráfico: {datos_empresa['nombre']}</span>
             <span style="margin-left: 10px;" class="card-badge">{datos_empresa['estado']}</span>
         </div>
         <div style="display: flex; gap: 25px;">
@@ -698,104 +694,103 @@ if st.sidebar.button("🔍 Analizar Carpeta", use_container_width=True, type="pr
             else:
                 st.session_state['resultados'] = resultados
 
-# Mostrar resultados si están en session_state
-if 'resultados' in st.session_state and st.session_state['resultados']:
-    df_resultados = pd.DataFrame(st.session_state['resultados'])
-    
-    df_activos = df_resultados[~df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
-    if not df_activos.empty:
-        df_activos = df_activos.sort_values('puntaje', ascending=False)
-
-        dolar, _ = get_dolar_con_cache()
-        if dolar > 0:
-            df_activos['precio_usd'] = df_activos['precio'] / dolar
-
-            total_compras = len(df_activos[df_activos['estado'].str.contains('COMPRA', case=False, na=False)])
-            top_accion = df_activos.sort_values('puntaje', ascending=False).iloc[0]
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            kpi1, kpi2, kpi3 = st.columns(3)
-            with kpi1:
-                st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-title">Oportunidades de Compra</div>
-                    <div class="kpi-value" style="color: #4ade80;">{total_compras} Acciones</div>
-                </div>
-                """, unsafe_allow_html=True)
-            with kpi2:
-                st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-title">Top Oportunidad #1</div>
-                    <div class="kpi-value" style="color: #facc15; font-size: 1.4rem;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
-                </div>
-                """, unsafe_allow_html=True)
-            with kpi3:
-                st.markdown(f"""
-                <div class="kpi-card">
-                    <div class="kpi-title">Máximo Upside Estimado</div>
-                    <div class="kpi-value" style="color: #38bdf8;">+{top_accion['upside']:.1f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            df_menos_1 = df_activos[df_activos['precio_usd'] < 1].copy()
-            df_mas_1 = df_activos[df_activos['precio_usd'] >= 1].copy()
-
-            def mostrar_tabla_interactiva(df, titulo, clave_tabla):
-                if df.empty:
-                    return
-                
-                df_display = df.copy()
-                df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
-                
-                columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
-                
-                st.markdown(f"""
-                <div class="section-header">
-                    <span>📈 {titulo}</span> 
-                    <span style="font-size: 0.85rem; font-weight: 500; color: #64748b;">({len(df)} empresas)</span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                evento = st.dataframe(
-                    df_display[columnas_mostrar], 
-                    use_container_width=True, 
-                    hide_index=True,
-                    height=min(450, (len(df) + 1) * 38 + 12),
-                    selection_mode="single-row",
-                    on_select="rerun",
-                    key=clave_tabla,
-                    column_config={
-                        "Ticker": st.column_config.Column(
-                            "Ticker", 
-                            help="Haz clic en cualquier Ticker para abrir el gráfico analítico",
-                            width="small"
-                        ),
-                        "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
-                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="small"),
-                        "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
-                        "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
-                        "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
-                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
-                    }
-                )
-                
-                if evento:
-                    filas_seleccionadas = evento.get("selection", {}).get("rows", [])
-                    if filas_seleccionadas:
-                        indice_fila = filas_seleccionadas[0]
-                        nombre_empresa_tocada = df_display.iloc[indice_fila]['Ticker']
-                        datos_empresa = next((item for item in st.session_state['resultados'] if item["nombre"] == nombre_empresa_tocada), None)
-                        if datos_empresa:
-                            st.session_state['empresa_modal'] = datos_empresa
-
-            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
-            st.markdown("<br>", unsafe_allow_html=True)
-            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
-
-            if st.session_state['empresa_modal'] is not None:
-                mostrar_modal_grafico(st.session_state['empresa_modal'])
-
+# --- RENDERIZADO PRINCIPAL O VISTA DE GRÁFICO EN PESTAÑA NUEVA ---
+if st.session_state['empresa_seleccionada'] is not None:
+    renderizar_vista_grafico(st.session_state['empresa_seleccionada'])
 else:
-    st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
+    # Mostrar resultados si están en session_state
+    if 'resultados' in st.session_state and st.session_state['resultados']:
+        df_resultados = pd.DataFrame(st.session_state['resultados'])
+        
+        df_activos = df_resultados[~df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
+        if not df_activos.empty:
+            df_activos = df_activos.sort_values('puntaje', ascending=False)
+
+            dolar, _ = get_dolar_con_cache()
+            if dolar > 0:
+                df_activos['precio_usd'] = df_activos['precio'] / dolar
+
+                total_compras = len(df_activos[df_activos['estado'].str.contains('COMPRA', case=False, na=False)])
+                top_accion = df_activos.sort_values('puntaje', ascending=False).iloc[0]
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                kpi1, kpi2, kpi3 = st.columns(3)
+                with kpi1:
+                    st.markdown(f"""
+                    <div class="kpi-card">
+                        <div class="kpi-title">Oportunidades de Compra</div>
+                        <div class="kpi-value" style="color: #4ade80;">{total_compras} Acciones</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with kpi2:
+                    st.markdown(f"""
+                    <div class="kpi-card">
+                        <div class="kpi-title">Top Oportunidad #1</div>
+                        <div class="kpi-value" style="color: #facc15; font-size: 1.4rem;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with kpi3:
+                    st.markdown(f"""
+                    <div class="kpi-card">
+                        <div class="kpi-title">Máximo Upside Estimado</div>
+                        <div class="kpi-value" style="color: #38bdf8;">+{top_accion['upside']:.1f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                def mostrar_tabla_interactiva(df, titulo, clave_tabla):
+                    if df.empty:
+                        return
+                    
+                    df_display = df.copy()
+                    df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
+                    
+                    columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
+                    
+                    st.markdown(f"""
+                    <div class="section-header">
+                        <span>📈 {titulo}</span> 
+                        <span style="font-size: 0.85rem; font-weight: 500; color: #64748b;">({len(df)} empresas)</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    evento = st.dataframe(
+                        df_display[columnas_mostrar], 
+                        use_container_width=True, 
+                        hide_index=True,
+                        height=min(450, (len(df) + 1) * 38 + 12),
+                        selection_mode="single-row",
+                        on_select="rerun",
+                        key=clave_tabla,
+                        column_config={
+                            "Ticker": st.column_config.Column(
+                                "Ticker", 
+                                help="Haz clic en cualquier Ticker para abrir el gráfico analítico en pestaña completa",
+                                width="small"
+                            ),
+                            "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
+                            "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="small"),
+                            "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
+                            "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
+                            "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
+                            "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
+                        }
+                    )
+                    
+                    if evento:
+                        filas_seleccionadas = evento.get("selection", {}).get("rows", [])
+                        if filas_seleccionadas:
+                            indice_fila = filas_seleccionadas[0]
+                            nombre_empresa_tocada = df_display.iloc[indice_fila]['Ticker']
+                            datos_empresa = next((item for item in st.session_state['resultados'] if item["nombre"] == nombre_empresa_tocada), None)
+                            if datos_empresa:
+                                st.session_state['empresa_seleccionada'] = datos_empresa
+                                st.rerun()
+
+                mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
+                st.markdown("<br>", unsafe_allow_html=True)
+                mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
+
+    else:
+        st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
