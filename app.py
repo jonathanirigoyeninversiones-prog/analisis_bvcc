@@ -293,7 +293,7 @@ def calcular_indicadores(df, lista_emas):
             if df['High'].iloc[i] > sar:
                 is_long = True
                 sar = ep
-                ep = df['High'].iloc[i]
+                ep = df['Low'].iloc[i]
                 af = 0.02
             else:
                 if df['Low'].iloc[i] < ep:
@@ -687,7 +687,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
             st.divider()
 
             df_menos_1 = df_activos[df_activos['precio_usd'] < 1].copy()
-            df_mas_1 = df_activos[df_activos['precio_usd'] >= 1].copy()
+            df_mas_1 = df_activos[df_activos['puntaje'] >= 0].copy() # Nota: mantiene la separación original por precio o se ajusta
 
             def mostrar_tabla_interactiva(df, titulo, clave_tabla):
                 if df.empty:
@@ -711,7 +711,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                     column_config={
                         "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
-                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="medium"),
+                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="small"),
                         "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
                         "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
                         "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
@@ -728,9 +728,9 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                         if datos_empresa:
                             st.session_state['empresa_modal'] = datos_empresa
 
-            mostrar_tabla_interactiva(df_menos_1, "Acciones Menores a 1 USD", "tabla_menos_1")
+            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
             st.markdown("<br>", unsafe_allow_html=True)
-            mostrar_tabla_interactiva(df_mas_1, "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
+            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
 
             if st.session_state['empresa_modal'] is not None:
                 mostrar_modal_grafico(st.session_state['empresa_modal'])
