@@ -110,7 +110,10 @@ def calcular_indicadores(df):
         avg_loss.iloc[i] = (avg_loss.iloc[i-1] * 13 + loss.iloc[i]) / 14
 
     rs = avg_gain / avg_loss
-    df['RSI'] = 100 - (100 / (1 + rs))
+    rsi_raw = 100 - (100 / (1 + rs))
+    
+    # --- SUAVIZADO DEL RSI PARA EVITAR LÍNEAS RECTAS Y PLANAS ---
+    df['RSI'] = rsi_raw.ewm(span=3, adjust=False).mean()
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
     df['SMA20'] = df['Close'].rolling(20).mean()
@@ -134,7 +137,7 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. GENERAR GRÁFICA INTERACTIVA CON LOS DATOS DEL CSV
+# 3. GENERAR GRÁFICA INTERACTIVA CON NAVEGACIÓN TIPO TRADINGVIEW
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(120).copy()
@@ -143,7 +146,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         rows=3, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.03, 
-        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Volumen (Área Gris + MA 20)', 'Fuerza Relativa RSI (14) - Amarillo'),
+        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Volumen (Área Gris + MA 20)', 'RSI (14) - Suavizado'),
         row_width=[0.22, 0.18, 0.60]
     )
 
@@ -180,10 +183,10 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         line=dict(color='#f59e0b', width=1.5), name='Vol MA 20'
     ), row=2, col=1)
 
-    # 3. RSI Amarillo
+    # 3. RSI Amarillo Suavizado
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['RSI'],
-        line=dict(color='#facc15', width=2),
+        line=dict(color='#facc15', width=2, shape='spline'), # CURVA FLUIDA Y SUAVE
         name='RSI 14'
     ), row=3, col=1)
     
@@ -196,6 +199,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         xaxis_rangeslider_visible=False,
         margin=dict(l=20, r=20, t=40, b=20),
         hovermode='x unified',
+        dragmode='pan', # CLIC Y ARRASTRE PARA MOVER LA GRÁFICA
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
@@ -328,7 +332,13 @@ def mostrar_modal_grafico(datos_empresa):
     df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
     df_indicadores = calcular_indicadores(df_convertido)
     fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad)
-    st.plotly_chart(fig, use_container_width=True)
+    
+    # CONFIGURAMOS ZOOM CON RUEDA DE RATÓN Y DESPLAZAMIENTO POR ARRASTRE
+    st.plotly_chart(
+        fig, 
+        use_container_width=True, 
+        config={'scrollZoom': True, 'displayModeBar': True}
+    )
 
 # -------------------------------------------------------------------
 # 6. INTERFAZ PRINCIPAL
