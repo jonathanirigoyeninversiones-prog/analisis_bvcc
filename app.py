@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE & CALENDARIO CORREGIDO)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE & TABLAS EXPANDIDAS)
 st.markdown("""
 <style>
     .stApp {
@@ -26,7 +26,7 @@ st.markdown("""
         padding-top: 1rem;
     }
 
-    /* Corrección para que el popover del calendario se vea completo y no se corte */
+    /* Corrección para que el popover del calendario se vea completo */
     div[data-baseweb="popover"] {
         z-index: 999999 !important;
     }
@@ -34,7 +34,7 @@ st.markdown("""
     div[data-baseweb="calendar"] {
         background-color: #0f172a !important;
         color: #f8fafc !important;
-        border: 1px solid #334155 !important;
+        border: 1px solid #334151 !important;
         border-radius: 12px !important;
     }
 
@@ -43,6 +43,14 @@ st.markdown("""
         border: 1px solid #374151 !important;
         border-radius: 16px !important;
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+    }
+
+    /* Forzar que las tablas ocupen todo el ancho horizontal disponible */
+    div[data-testid="stDataFrame"] {
+        width: 100% !important;
+    }
+    div[data-testid="stDataFrame"] > div {
+        width: 100% !important;
     }
 
     .header-card {
@@ -508,10 +516,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
                 'precio': 0,
                 'target': 0,
                 'upside': 0,
-                'rsi': 0,
-                'rsi_ayer': 0,
-                'ema30': 0,
-                'ema60': 0,
                 'fecha_ultimo': fecha_referencia.strftime('%Y-%m-%d'),
                 'df_original': df
             }
@@ -599,10 +603,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             'precio': float(ultimo_datos['Close']),
             'target': float(target),
             'upside': float(upside),
-            'rsi': round(rsi_hoy, 2) if not pd.isna(rsi_hoy) else 0,
-            'rsi_ayer': round(rsi_ayer, 2) if not pd.isna(rsi_ayer) else 0,
-            'ema30': float(ultimo_datos['EMA30']) if not pd.isna(ultimo_datos['EMA30']) else 0,
-            'ema60': float(ultimo_datos['EMA60']) if not pd.isna(ultimo_datos['EMA60']) else 0,
             'fecha_ultimo': fecha_ultimo_operado,
             'df_original': df
         }
@@ -719,7 +719,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 df_display = df.copy()
                 df_display = df_display.rename(columns={'estado': 'Recomendado'})
                 
-                columnas_mostrar = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'rsi', 'rsi_ayer', 'ema30', 'ema60']
+                columnas_mostrar = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
                 
                 st.subheader(f"📊 {titulo} ({len(df)} empresas)")
                 
@@ -732,18 +732,14 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                     on_select="rerun",
                     key=clave_tabla,
                     column_config={
-                        "nombre": st.column_config.TextColumn("Ticker", width="small"),
+                        "nombre": st.column_config.TextColumn("Ticker", width="medium"),
+                        "fecha_ultimo": st.column_config.TextColumn("Último Día", width="medium"),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
-                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="medium"),
-                        "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
-                        "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
-                        "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs"),
-                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%"),
-                        "rsi": st.column_config.NumberColumn("RSI Hoy", format="%.2f"),
-                        "rsi_ayer": st.column_config.NumberColumn("RSI Ayer", format="%.2f"),
-                        "ema30": st.column_config.NumberColumn("EMA 30", format="%.2f Bs"),
-                        "ema60": st.column_config.NumberColumn("EMA 60", format="%.2f Bs"),
-                        "fecha_ultimo": st.column_config.TextColumn("Último Día")
+                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="large"),
+                        "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="medium"),
+                        "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="medium"),
+                        "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="medium"),
+                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="medium")
                     }
                 )
                 
