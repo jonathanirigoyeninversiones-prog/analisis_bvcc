@@ -14,15 +14,13 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Analizador BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS PARA UN MODAL ELEGANTE
+# ESTILOS CSS PERSONALIZADOS
 st.markdown("""
 <style>
-    /* Fondo oscuro y tipografía refinada */
     .stApp {
         background-color: #050505;
     }
     
-    /* Estilos del Modal */
     div[role="dialog"] {
         background-color: #0a0a0c !important;
         border: 1px solid #1e293b !important;
@@ -30,7 +28,6 @@ st.markdown("""
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8) !important;
     }
 
-    /* Tarjeta resumida del Modal */
     .header-card {
         background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
         border: 1px solid #1e293b;
@@ -183,12 +180,11 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. DISEÑO GRÁFICO ULTRA-ELEGANTE (SIN RSI)
+# 3. DISEÑO GRÁFICO
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(100).copy()
 
-    # 3 Pisos: Precio (60%), Volumen (20%), MACD (20%)
     fig = make_subplots(
         rows=3, cols=1, 
         shared_xaxes=True, 
@@ -239,7 +235,6 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         line=dict(color='#fb923c', width=1.2), name='Signal'
     ), row=3, col=1)
 
-    # ESTILIZACIÓN MINIMALISTA Y ELEGANTE
     fig.update_layout(
         height=720, 
         paper_bgcolor='#0a0a0c',
@@ -379,7 +374,6 @@ def mostrar_modal_grafico(datos_empresa):
     dolar, _ = get_dolar_con_cache()
     precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
     
-    # Tarjeta de Cabecera Flotante Eleganter (Sin RSI)
     st.markdown(f"""
     <div class="header-card">
         <div>
@@ -496,13 +490,13 @@ if st.session_state.get('analizado', False):
             
             df_display = df.copy()
             df_display = df_display.rename(columns={'estado': 'Recomendado'})
-            for col in ['precio', 'target', 'ema30', 'ema60']:
+            for col in ['precio', 'target']:
                 df_display[col] = df_display[col].apply(fmt_bs)
             df_display['precio_usd'] = df_display['precio_usd'].apply(lambda x: f"{x:.4f}")
             df_display['upside'] = df_display['upside'].apply(lambda x: f"{x:.2f}%")
-            df_display['rsi'] = df_display['rsi'].apply(lambda x: f"{x:.2f}")
 
-            columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside', 'rsi', 'ema30', 'ema60']
+            # COLUMNAS LIMPIAS (SIN RSI, EMA30, EMA60)
+            columnas = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
             
             st.subheader(f"📊 {titulo} ({len(df)} acciones)")
             st.caption("💡 Haz clic en una fila para desplegar la analítica de la empresa.")
