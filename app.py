@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE & CALENDARIO CORREGIDO)
 st.markdown("""
 <style>
     .stApp {
@@ -23,6 +23,19 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         background-color: #090d16 !important;
         border-right: 1px solid #1f2937;
+        padding-top: 1rem;
+    }
+
+    /* Corrección para que el popover del calendario se vea completo y no se corte */
+    div[data-baseweb="popover"] {
+        z-index: 999999 !important;
+    }
+    
+    div[data-baseweb="calendar"] {
+        background-color: #0f172a !important;
+        color: #f8fafc !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
     }
 
     div[role="dialog"] {
@@ -294,7 +307,7 @@ def calcular_indicadores(df, lista_emas):
     return df
 
 # -------------------------------------------------------------------
-# GRÁFICO TÉCNICO INTERactivo (PLOTLY)
+# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY)
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
     df_plot = df.tail(100).copy()
@@ -600,18 +613,15 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
 # -------------------------------------------------------------------
 # 3. INTERFAZ DE USUARIO Y CONFIGURACIÓN LATERAL
 # -------------------------------------------------------------------
-st.sidebar.subheader("⚙️ Configuración")
-
-carpeta = st.sidebar.text_input(
-    "📁 Ruta de la carpeta con tus CSV",
-    value="./datos_bvc"
-)
+st.sidebar.subheader("📅 Fecha de Referencia")
 
 fecha_referencia = st.sidebar.date_input(
-    "📅 Fecha de referencia (viaje en el tiempo)",
+    "Seleccionar fecha",
     value=date.today(),
-    help="La app buscará el último dato disponible en o antes de esta fecha."
+    label_visibility="collapsed"
 )
+
+carpeta = "./datos_bvc"
 
 # --- Cabecera con Título a la izquierda y Dólar a la derecha ---
 col_titulo, col_dolar = st.columns([2, 1])
@@ -635,13 +645,15 @@ with col_dolar:
             </div>
             """, unsafe_allow_html=True)
 
+st.sidebar.markdown("<br>", unsafe_allow_html=True)
 if st.sidebar.button("🔍 Analizar Carpeta", use_container_width=True, type="primary"):
     if not os.path.exists(carpeta):
-        st.error("⚠️ La ruta no existe. Verifica la carpeta.")
+        os.makedirs(carpeta, exist_ok=True)
+        st.error("⚠️ La carpeta `./datos_bvc` no existía, se ha creado vacía. Coloca tus CSV dentro.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("No se encontraron archivos .csv en esa carpeta.")
+            st.warning("No se encontraron archivos .csv en la carpeta `./datos_bvc`.")
         else:
             resultados = []
             with st.spinner(f"Analizando {len(archivos)} archivos hasta {fecha_referencia.strftime('%Y-%m-%d')}..."):
@@ -753,4 +765,4 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
-    st.info("👈 Configura la ruta de tu carpeta, selecciona una fecha y presiona 'Analizar Carpeta' en la barra lateral.")
+    st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
