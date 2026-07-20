@@ -4,3 +4,4 @@ numpy
 requests
 tradingview-screener
 yfinance
+plotly
