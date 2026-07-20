@@ -35,6 +35,14 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
+    /* FORZAR ANCHO TOTAL EN LAS TABLAS DE DATOS */
+    [data-testid="stDataFrame"] {
+        width: 100% !important;
+    }
+    [data-testid="stDataFrame"] > div {
+        width: 100% !important;
+    }
+
     .header-card {
         background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
         border: 1px solid #374151;
@@ -365,7 +373,8 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
     
     return fig
 
-def analizar_archivo(ruta_archivo, fecha_referencia):
+@st.cache_data(ttl=3600)
+def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
     try:
         df = pd.read_csv(ruta_archivo, decimal=',', thousands='.')
         df.columns = df.columns.str.replace('.CR', '').str.strip()
@@ -393,7 +402,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         else:
             ultimo = df_con_volumen.iloc[-1]
 
-        df_calculado = calcular_indicadores(df.copy(), st.session_state['lista_emas'])
+        df_calculado = calcular_indicadores(df.copy(), list(lista_emas_tuple))
         ultimo_fila = df_calculado[df_calculado['Date'] == ultimo['Date']]
         ultimo_datos = df_calculado.iloc[-1] if ultimo_fila.empty else ultimo_fila.iloc[-1]
 
@@ -585,8 +594,9 @@ if btn_analizar:
         else:
             resultados = []
             with st.spinner("Analizando..."):
+                emas_tuple = tuple((item['periodo'], item['color']) for item in st.session_state['lista_emas'])
                 for archivo in archivos:
-                    res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
+                    res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia, emas_tuple)
                     if res:
                         resultados.append(res)
 
@@ -661,12 +671,12 @@ if st.session_state.get('analizado', False):
                 df_display[columnas], 
                 use_container_width=True, 
                 hide_index=True,
-                height=min(450, (len(df) + 1) * 35 + 10),
+                height=min(480, (len(df) + 1) * 35 + 10),
                 selection_mode="single-row",
                 on_select="rerun",
                 key=clave_tabla,
                 column_config={
-                    "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción", width="medium"),
+                    "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción", width="small"),
                     "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
                     "Puntaje": st.column_config.ProgressColumn(
                         "Score Cuantitativo",
