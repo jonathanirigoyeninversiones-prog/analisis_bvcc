@@ -342,7 +342,7 @@ def calcular_indicadores(df, lista_emas):
     return df
 
 # -------------------------------------------------------------------
-# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY)
+# GRÁFICO TÉCNICO INTERACTIVO (LÓGICA TRADINGVIEW: SCROLL ZOOM / ESCALA Y)
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
     df_plot = df.copy()
@@ -425,6 +425,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
         showlegend=False
     )
     
+    # Comportamiento exacto TradingView: Zoom por scroll y escalado libre en eje Y
     fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False, fixedrange=False)
     fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False, fixedrange=False)
     
