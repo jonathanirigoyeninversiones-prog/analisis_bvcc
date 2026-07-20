@@ -372,19 +372,22 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
     return fig
 
 @st.cache_data(ttl=3600)
-def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
+def analizar_archivo(ruta_archivo, lista_emas_tuple):
     try:
-        # Intento de lectura flexible para cualquier formato de CSV (coma o punto y coma)
+        df = None
         for sep_val in [None, ',', ';', '\t']:
             try:
                 if sep_val is None:
                     df = pd.read_csv(ruta_archivo, engine='python', decimal=',', thousands='.')
                 else:
                     df = pd.read_csv(ruta_archivo, sep=sep_val, decimal=',', thousands='.')
-                if len(df.columns) > 1:
+                if df is not None and len(df.columns) > 1:
                     break
             except Exception:
                 continue
+
+        if df is None or df.empty:
+            return None
 
         df.columns = df.columns.str.replace('.CR', '', regex=False).str.strip()
 
@@ -406,7 +409,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         
         df = df.rename(columns=renombres)
 
-        # Si aún no detecta columnas estándar, asignamos por posición si tiene al menos 5 columnas
         if 'Close' not in df.columns and len(df.columns) >= 5:
             pos_cols = list(df.columns)
             df = df.rename(columns={
@@ -625,22 +627,23 @@ if st.session_state['analizado']:
     
     archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')] if os.path.exists(carpeta) else []
     
+    # Si la carpeta está vacía en la máquina virtual, ejecutamos el descargador automáticamente
     if not archivos:
-        with st.spinner("Descargando datos automáticamente..."):
+        with st.spinner("Generando y descargando datos en el servidor virtual..."):
             try:
                 subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
-                archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
+                archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')] if os.path.exists(carpeta) else []
             except Exception:
                 pass
 
     if not archivos:
-        st.warning("⚠️ No se encontraron archivos CSV en la carpeta `./datos_bvc`. Haz clic en 'Actualizar Historial BVC'.")
+        st.warning("⚠️ No se encontraron archivos CSV. Haz clic en 'Actualizar Historial BVC'.")
     else:
         resultados = []
         with st.spinner("Analizando mercado y calculando indicadores técnicos..."):
             emas_tuple = tuple((item['periodo'], item['color']) for item in st.session_state['lista_emas'])
             for archivo in archivos:
-                res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia, emas_tuple)
+                res = analizar_archivo(os.path.join(carpeta, archivo), emas_tuple)
                 if res:
                     resultados.append(res)
 
