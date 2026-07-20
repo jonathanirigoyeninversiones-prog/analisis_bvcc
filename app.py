@@ -12,61 +12,94 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Analizador BVC - Premium", layout="wide")
+st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE)
 st.markdown("""
 <style>
+    /* Fondo General Negro AMOLED */
     .stApp {
-        background-color: #050505;
+        background-color: #030712;
+        color: #f3f4f6;
     }
     
-    div[role="dialog"] {
-        background-color: #0a0a0c !important;
-        border: 1px solid #1e293b !important;
-        border-radius: 16px !important;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8) !important;
+    /* Personalización del Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #090d16 !important;
+        border-right: 1px solid #1f2937;
     }
 
+    /* Estilos del Modal */
+    div[role="dialog"] {
+        background-color: #090d16 !important;
+        border: 1px solid #374151 !important;
+        border-radius: 16px !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+    }
+
+    /* Tarjeta resumida del Modal */
     .header-card {
-        background: linear-gradient(135deg, #111827 0%, #0f172a 100%);
-        border: 1px solid #1e293b;
+        background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+        border: 1px solid #374151;
         border-radius: 12px;
         padding: 16px 20px;
         margin-bottom: 15px;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
     
     .card-title {
-        font-size: 1.5rem;
-        font-weight: 700;
+        font-size: 1.6rem;
+        font-weight: 800;
         color: #ffffff;
         margin: 0;
+        letter-spacing: -0.02em;
     }
     
     .card-badge {
-        background: rgba(34, 197, 94, 0.15);
+        background: rgba(34, 197, 94, 0.2);
         color: #4ade80;
-        border: 1px solid rgba(34, 197, 94, 0.3);
-        padding: 4px 12px;
+        border: 1px solid rgba(34, 197, 94, 0.4);
+        padding: 5px 14px;
         border-radius: 20px;
         font-size: 0.85rem;
-        font-weight: 600;
+        font-weight: 700;
     }
 
     .metric-value {
-        font-size: 1.2rem;
+        font-size: 1.25rem;
         font-weight: 700;
-        color: #f8fafc;
+        color: #f9fafb;
     }
     
     .metric-label {
-        font-size: 0.75rem;
-        color: #64748b;
+        font-size: 0.72rem;
+        color: #9ca3af;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.08em;
+    }
+
+    /* Tarjetas de Resumen en Pantalla Principal (KPIs) */
+    .kpi-card {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .kpi-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #38bdf8;
+    }
+    .kpi-title {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -180,7 +213,7 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. DISEÑO GRÁFICO
+# 3. DISEÑO GRÁFICO DEL MODAL
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(100).copy()
@@ -237,8 +270,8 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
 
     fig.update_layout(
         height=720, 
-        paper_bgcolor='#0a0a0c',
-        plot_bgcolor='#0a0a0c',
+        paper_bgcolor='#090d16',
+        plot_bgcolor='#090d16',
         xaxis_rangeslider_visible=False,
         margin=dict(l=10, r=10, t=25, b=10),
         hovermode='x unified',
@@ -339,11 +372,11 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         puntaje = min(puntaje, 100)
 
         if puntaje >= 60 and ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
-            estado = '✅ COMPRA'
+            estado = 'COMPRA'
         elif puntaje >= 35:
-            estado = '🔍 SEGUIMIENTO'
+            estado = 'SEGUIMIENTO'
         else:
-            estado = '⏸️ ESPERAR'
+            estado = 'ESPERAR'
 
         return {
             'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
@@ -364,7 +397,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         return None
 
 # -------------------------------------------------------------------
-# 5. MODAL ELEGANTE REDISEÑADO
+# 5. MODAL ELEGANTE
 # -------------------------------------------------------------------
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
@@ -412,9 +445,9 @@ def mostrar_modal_grafico(datos_empresa):
     )
 
 # -------------------------------------------------------------------
-# 6. INTERFAZ PRINCIPAL
+# 6. INTERFAZ PRINCIPAL CON ESTILO BLOOMBERG / TRADINGVIEW
 # -------------------------------------------------------------------
-st.sidebar.subheader("📥 Datos de la Bolsa")
+st.sidebar.subheader("📥 Control del Mercado")
 fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
 
 st.sidebar.divider()
@@ -434,20 +467,20 @@ btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=Tr
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
-    st.title("📊 Terminal Analítico BVC")
-    st.markdown("**Bolsa de Valores de Caracas** - Estrategia cuantitativa sin volumen.")
+    st.title("⚡ Terminal Analítico BVC")
+    st.caption("Bolsa de Valores de Caracas • Estrategia cuantitativa automatizada")
 
 with col_dolar:
     with st.spinner("Cargando dólar..."):
         dolar_oficial, fecha_dolar = get_dolar_con_cache()
         if dolar_oficial > 0:
             st.markdown(f"""
-            <div style="text-align: right; padding: 10px; background: transparent; border-radius: 12px; margin-top: 5px;">
-                <p style="margin: 0; font-weight: 700; font-size: 1.2rem; color: #facc15;">
-                    💵 Precio $ BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
+            <div style="text-align: right; padding: 10px; background: rgba(250, 204, 21, 0.05); border: 1px solid rgba(250, 204, 21, 0.2); border-radius: 12px; margin-top: 5px;">
+                <p style="margin: 0; font-weight: 800; font-size: 1.25rem; color: #facc15;">
+                    💵 Dólar BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
                 </p>
                 <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
-                    Actualizado: {fecha_dolar}
+                    Cierre Oficial: {fecha_dolar}
                 </p>
             </div>
             """, unsafe_allow_html=True)
@@ -463,7 +496,7 @@ if btn_analizar:
             st.warning("No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
         else:
             resultados = []
-            with st.spinner("Procesando datos del mercado..."):
+            with st.spinner("Ejecutando algoritmo cuantitativo..."):
                 for archivo in archivos:
                     res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
                     if res:
@@ -481,6 +514,36 @@ if st.session_state.get('analizado', False):
     if dolar > 0:
         df_resultados['precio_usd'] = df_resultados['precio'] / dolar
 
+        # TARJETAS DESTACADAS KPI EN CABECERA
+        total_compras = len(df_resultados[df_resultados['estado'] == 'COMPRA'])
+        top_accion = df_resultados.sort_values('puntaje', ascending=False).iloc[0]
+        
+        st.divider()
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="kpi-title">Oportunidades de Compra</div>
+                <div class="kpi-value" style="color: #4ade80;">{total_compras} Acciones</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="kpi-title">Top Oportunidad #1</div>
+                <div class="kpi-value" style="color: #facc15;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col3:
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="kpi-title">Máximo Potencial Estimado</div>
+                <div class="kpi-value" style="color: #38bdf8;">+{top_accion['upside']:.1f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.divider()
+
         df_menos_1 = df_resultados[df_resultados['precio_usd'] < 1].sort_values('puntaje', ascending=False)
         df_mas_1 = df_resultados[df_resultados['precio_usd'] >= 1].sort_values('puntaje', ascending=False)
 
@@ -489,42 +552,63 @@ if st.session_state.get('analizado', False):
                 return
             
             df_display = df.copy()
-            df_display = df_display.rename(columns={'estado': 'Recomendado'})
-            for col in ['precio', 'target']:
-                df_display[col] = df_display[col].apply(fmt_bs)
-            df_display['precio_usd'] = df_display['precio_usd'].apply(lambda x: f"{x:.4f}")
-            df_display['upside'] = df_display['upside'].apply(lambda x: f"{x:.2f}%")
-
-            # COLUMNAS LIMPIAS (SIN FECHA ULTIMO, RSI, EMA30, EMA60)
-            columnas = ['nombre', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
+            df_display = df_display.rename(columns={
+                'nombre': 'Ticker',
+                'estado': 'Recomendado',
+                'puntaje': 'Puntaje',
+                'precio': 'Precio (Bs)',
+                'precio_usd': 'Precio (USD)',
+                'target': 'Target (Bs)',
+                'upside': 'Potencial'
+            })
             
-            st.subheader(f"📊 {titulo} ({len(df)} acciones)")
-            st.caption("💡 Haz clic en una fila para desplegar la analítica de la empresa.")
+            columnas = ['Ticker', 'Recomendado', 'Puntaje', 'Precio (Bs)', 'Precio (USD)', 'Target (Bs)', 'Potencial']
             
-            evento = st.dataframe(
+            st.subheader(f"📊 {titulo} ({len(df)} empresas)")
+            
+            # FORMATO VISUAL ESTILO TRADINGVIEW / BLOOMBERG
+            st.dataframe(
                 df_display[columnas], 
                 use_container_width=True, 
                 hide_index=True,
                 selection_mode="single-row",
                 on_select="rerun",
-                key=clave_tabla
+                key=clave_tabla,
+                column_config={
+                    "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción", width="medium"),
+                    "Recomendado": st.column_config.TextColumn("Estatus", width="medium"),
+                    "Puntaje": st.column_config.ProgressColumn(
+                        "Score Cuantitativo",
+                        help="Puntaje asignado por el algoritmo",
+                        format="%f pts",
+                        min_value=0,
+                        max_value=100,
+                        width="medium"
+                    ),
+                    "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
+                    "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
+                    "Target (Bs)": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs"),
+                    "Potencial": st.column_config.NumberColumn("Potencial (Upside)", format="+%.2f%%")
+                }
             )
             
-            filas_seleccionadas = evento.selection.get("rows", [])
-            if filas_seleccionadas:
-                indice_fila = filas_seleccionadas[0]
-                nombre_empresa_tocada = df_display.iloc[indice_fila]['nombre']
-                datos_empresa = next((item for item in resultados if item["nombre"] == nombre_empresa_tocada), None)
-                if datos_empresa:
-                    st.session_state['empresa_modal'] = datos_empresa
+            # CAPTURAR CLIC DE FILA
+            evento = st.session_state.get(clave_tabla)
+            if evento:
+                filas_seleccionadas = evento.get("selection", {}).get("rows", [])
+                if filas_seleccionadas:
+                    indice_fila = filas_seleccionadas[0]
+                    nombre_empresa_tocada = df_display.iloc[indice_fila]['Ticker']
+                    datos_empresa = next((item for item in resultados if item["nombre"] == nombre_empresa_tocada), None)
+                    if datos_empresa:
+                        st.session_state['empresa_modal'] = datos_empresa
 
-        st.subheader(f"📈 Oportunidades del Mercado - {fecha_referencia.strftime('%Y-%m-%d')}")
-        
-        mostrar_tabla_interactiva(df_menos_1, "🔽 Acciones Menores a 1 USD", "tabla_menos_1")
-        mostrar_tabla_interactiva(df_mas_1, "🔼 Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
+        mostrar_tabla_interactiva(df_menos_1, "Acciones Menores a 1 USD", "tabla_menos_1")
+        st.markdown("<br>", unsafe_allow_html=True)
+        mostrar_tabla_interactiva(df_mas_1, "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
 
         if st.session_state['empresa_modal'] is not None:
             mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
-    st.info("👈 Presiona 'Analizar Mercado' en el menú lateral para desplegar las tablas.")
+    st.info("👈 Presiona 'Analizar Mercado' en la barra lateral para desplegar la información.")
