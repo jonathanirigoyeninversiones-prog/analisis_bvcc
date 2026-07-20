@@ -642,7 +642,7 @@ if st.session_state.get('analizado', False):
             
             df_display = df.copy()
             df_display['estado_visual'] = df_display['estado'].apply(
-                lambda x: '✅ COMPRA' if 'COMPRA' in x else ('🔍 SEGUIMIENTO' if 'SEGUIMIENTO' in x else '⏸️ ESPERAR')
+                lambda x: 'COMPRA' if 'COMPRA' in x else ('SEGUIM.' if 'SEGUIMIENTO' in x else 'ESPERAR')
             )
 
             df_display = df_display.rename(columns={
