@@ -6,7 +6,8 @@ import requests
 import subprocess
 import sys
 from datetime import datetime, date
-import streamlit.components.v1 as components
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
@@ -61,75 +62,38 @@ def get_dolar_con_cache():
     return obtener_dolar_oficial()
 
 # -------------------------------------------------------------------
-# 1. MAPEADOR DE SIMBOLOS BVC -> TRADINGVIEW
+# 1. FUNCIÓN DE AGRUPACIÓN POR TEMPORALIDAD (RESAMPLING)
 # -------------------------------------------------------------------
-def obtener_simbolo_tradingview(nombre_empresa):
-    # Diccionario para adaptar nombres de CSV a la nomenclatura exacta de TradingView en la BVC
-    mapa_simbolos = {
-        "BPV": "BVCV",
-        "BVCC": "BVCC",
-        "PCP.B": "PCP.B",
-        "MVZ.A": "MVZ.A",
-        "MVZ.B": "MVZ.B",
-        "RST": "RST",
-        "RST.B": "RST.B",
-        "EFE": "EFE",
-        "FNV": "FNV",
-        "TDV.D": "TDV.D",
-        "CRM.A": "CRM.A",
-        "GPY": "GPY",
-        "IVC": "IVC",
-        "MPA": "MPA",
-        "PGR": "PGR",
-        "SVS": "SVS",
-        "VCM": "VCM.B"
-    }
-    # Si la empresa está en el mapa usa el ticker exacto, si no, usa el nombre limpio agregando la bolsa
-    ticker = mapa_simbolos.get(nombre_empresa.upper(), nombre_empresa.upper())
-    return f"BVC:{ticker}"
+def cambiar_temporalidad(df, temporalidad):
+    df = df.copy()
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+    
+    if temporalidad == "1 Semana":
+        df_resampled = df.resample('W').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }).dropna()
+    elif temporalidad == "1 Mes":
+        df_resampled = df.resample('ME').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }).dropna()
+    else:
+        df_resampled = df.reset_index()
+        return df_resampled
+        
+    df_resampled.reset_index(inplace=True)
+    return df_resampled
 
 # -------------------------------------------------------------------
-# 2. GENERADOR DEL WIDGET OFICIAL DE TRADINGVIEW (HTML/JS)
-# -------------------------------------------------------------------
-def generar_widget_tradingview(simbolo_tv):
-    html_code = f"""
-    <!-- TradingView Widget BEGIN -->
-    <div class="tradingview-widget-container" style="height:100%;width:100%;">
-      <div id="tradingview_bvc_chart" style="height:calc(100% - 32px);width:100%;"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-      <script type="text/javascript">
-      new TradingView.widget(
-      {{
-      "autosize": true,
-      "symbol": "{simbolo_tv}",
-      "interval": "D",
-      "timezone": "America/Caracas",
-      "theme": "dark",
-      "style": "1",
-      "locale": "es",
-      "toolbar_bg": "#f1f3f6",
-      "enable_publishing": false,
-      "hide_side_toolbar": false,
-      "allow_symbol_change": true,
-      "details": true,
-      "hotlist": true,
-      "calendar": true,
-      "studies": [
-        "STD;RSI",
-        "STD;EMA",
-        "STD;Bollinger_Bands"
-      ],
-      "container_id": "tradingview_bvc_chart"
-    }}
-      );
-      </script>
-    </div>
-    <!-- TradingView Widget END -->
-    """
-    return html_code
-
-# -------------------------------------------------------------------
-# 3. CÁLCULO DE INDICADORES INTERNOS
+# 2. CÁLCULO DE INDICADORES SOBRE LOS CSV
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -158,6 +122,8 @@ def calcular_indicadores(df):
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
 
+    df['Vol_MA20'] = df['Volume'].rolling(20).mean()
+
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -168,7 +134,80 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 4. ANALIZAR ARCHIVO
+# 3. GENERAR GRÁFICA INTERACTIVA CON LOS DATOS DEL CSV
+# -------------------------------------------------------------------
+def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
+    df_plot = df.tail(120).copy()
+
+    fig = make_subplots(
+        rows=3, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.03, 
+        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Volumen (Área Gris + MA 20)', 'Fuerza Relativa RSI (14) - Amarillo'),
+        row_width=[0.22, 0.18, 0.60]
+    )
+
+    # 1. Velas Japonesas
+    fig.add_trace(go.Candlestick(
+        x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
+        name='Precio (Bs)',
+        increasing_line_color='#22c55e', decreasing_line_color='#ef4444',
+        increasing_fillcolor='#22c55e', decreasing_fillcolor='#ef4444'
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.5), name='EMA 30'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#f43f5e', width=1.5), name='EMA 60'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
+
+    # 2. Volumen con Área Gris 30% Opacidad y MA 20
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['Volume'],
+        fill='tozeroy',
+        fillcolor='rgba(128, 128, 128, 0.3)',
+        line=dict(color='rgba(128, 128, 128, 0.5)', width=1),
+        name='Área Volumen'
+    ), row=2, col=1)
+
+    colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], '#22c55e', '#ef4444')
+    fig.add_trace(go.Bar(
+        x=df_plot['Date'], y=df_plot['Volume'],
+        marker_color=colores_volumen, name='Volumen', opacity=0.7
+    ), row=2, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['Vol_MA20'],
+        line=dict(color='#f59e0b', width=1.5), name='Vol MA 20'
+    ), row=2, col=1)
+
+    # 3. RSI Amarillo
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['RSI'],
+        line=dict(color='#facc15', width=2),
+        name='RSI 14'
+    ), row=3, col=1)
+    
+    fig.add_hline(y=70, line_dash="dash", row=3, col=1, line_color="#ef4444", line_width=1)
+    fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
+
+    fig.update_layout(
+        height=750, 
+        template='plotly_dark', 
+        xaxis_rangeslider_visible=False,
+        margin=dict(l=20, r=20, t=40, b=20),
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    fig.update_yaxes(title_text="Precio (Bs)", row=1, col=1)
+    fig.update_yaxes(title_text="Nominal", row=2, col=1)
+    fig.update_yaxes(title_text="Nivel", range=[10, 90], row=3, col=1)
+    
+    return fig
+
+# -------------------------------------------------------------------
+# 4. LEER Y PROCESAR ARCHIVO CSV
 # -------------------------------------------------------------------
 def analizar_archivo(ruta_archivo, fecha_referencia):
     try:
@@ -277,16 +316,19 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         return None
 
 # -------------------------------------------------------------------
-# 5. CONTROLADOR DEL MODAL FLOTANTE (INTERFACE NATIVA TRADINGVIEW)
+# 5. CONTROLADOR DEL MODAL FLOTANTE
 # -------------------------------------------------------------------
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
 
-@st.dialog("📈 TradingView - Análisis Interactivo BVC", width="large")
+@st.dialog("📊 Gráfico Técnico Avanzado (CSV BVC)", width="large")
 def mostrar_modal_grafico(datos_empresa):
-    simbolo_tv = obtener_simbolo_tradingview(datos_empresa['nombre'])
-    widget_html = generar_widget_tradingview(simbolo_tv)
-    components.html(widget_html, height=750, scrolling=False)
+    temporalidad = st.radio("Temporalidad:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
+
+    df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
+    df_indicadores = calcular_indicadores(df_convertido)
+    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad)
+    st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------------------------------------------------
 # 6. INTERFAZ PRINCIPAL
@@ -352,7 +394,7 @@ if btn_analizar:
             st.warning("No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
         else:
             resultados = []
-            with st.spinner("Procesando todas las empresas del mercado..."):
+            with st.spinner("Procesando todas las empresas del mercado desde los CSV..."):
                 for archivo in archivos:
                     res = analizar_archivo(os.path.join(carpeta, archivo), fecha_referencia)
                     if res:
@@ -394,19 +436,19 @@ if st.session_state.get('analizado', False):
         mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
         mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-        # --- SELECTOR DIRECTO PARA ABRIR MODAL TRADINGVIEW ---
+        # --- SELECTOR DIRECTO PARA ABRIR MODAL DESDE LOS CSV ---
         st.divider()
-        st.subheader("🔍 Abrir Gráficos Interáctivos TradingView")
+        st.subheader("🔍 Abrir Gráficos del Mercado")
         
         lista_empresas = sorted([r['nombre'] for r in resultados])
-        empresa_elegida = st.selectbox("Selecciona cualquier empresa para desplegar la interfaz completa de TradingView:", ["-- Selecciona una empresa --"] + lista_empresas)
+        empresa_elegida = st.selectbox("Selecciona cualquier empresa para desplegar su gráfico flotante:", ["-- Selecciona una empresa --"] + lista_empresas)
 
         if empresa_elegida != "-- Selecciona una empresa --":
             datos_empresa = next((item for item in resultados if item["nombre"] == empresa_elegida), None)
             if datos_empresa:
                 st.session_state['empresa_modal'] = datos_empresa
 
-        # EJECUCIÓN DEL MODAL TRADINGVIEW
+        # EJECUCIÓN DEL MODAL FLOTANTE
         if st.session_state['empresa_modal'] is not None:
             mostrar_modal_grafico(st.session_state['empresa_modal'])
 
