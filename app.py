@@ -44,7 +44,6 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* Forzar que las tablas ocupen todo el ancho sin cortes */
     div[data-testid="stDataFrame"] {
         width: 100% !important;
     }
@@ -531,22 +530,18 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         # ---------------------------------------------------------------
         puntaje = 0
 
-        # 1. TENDENCIA (EMA 30 vs 60)
         if ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
             puntaje += 25
 
-        # 2. DISTANCIA A EMA 60
         if not pd.isna(ultimo_datos['EMA60']) and ultimo_datos['EMA60'] > 0:
             distancia_ema = ((ultimo_datos['EMA60'] - ultimo_datos['Close']) / ultimo_datos['EMA60']) * 100
             if distancia_ema > 0:
                 pts_ema = min(distancia_ema * 1.6, 40)
                 puntaje += pts_ema
 
-        # 3. BOLLINGER
         if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] < ultimo_datos['BB_lower']:
             puntaje += 15
 
-        # 4. RSI - NIVEL
         rsi_hoy = ultimo_datos['RSI']
         rsi_ayer = ultimo_datos['RSI_Anterior']
         if not pd.isna(rsi_hoy):
@@ -554,12 +549,10 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             pts_nivel = max(0, 10 - distancia_al_30)
             puntaje += pts_nivel
 
-        # 5. RSI - PENDIENTE
         if not pd.isna(rsi_hoy) and not pd.isna(rsi_ayer):
             if rsi_hoy > rsi_ayer and rsi_hoy < 40:
                 puntaje += 10
 
-        # 6. POTENCIAL ATR
         if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
             target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
             upside = ((target - ultimo_datos['Close']) / ultimo_datos['Close']) * 100
@@ -570,13 +563,11 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         else:
             target, upside = 0, 0
 
-        # 7. BONUS EMA100
         if 'EMA100' in ultimo_datos and not pd.isna(ultimo_datos['EMA100']) and ultimo_datos['Close'] < ultimo_datos['EMA100']:
             puntaje += 5
 
         puntaje = min(puntaje, 100)
 
-        # CLASIFICACIÓN
         if puntaje >= 60 and ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
             estado = '✅ COMPRA'
         elif puntaje >= 35:
@@ -705,16 +696,18 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 df_display = df.copy()
                 df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
                 
-                # Columnas reducidas exactamente a lo necesario para que quepan holgadamente en el ancho de la pantalla sin scroll lateral oculto
                 columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
                 
                 st.subheader(f"📊 {titulo} ({len(df)} empresas)")
                 
-                st.dataframe(
+                evento = st.dataframe(
                     df_display[columnas_mostrar], 
                     use_container_width=True, 
                     hide_index=True,
                     height=min(480, (len(df) + 1) * 35 + 10),
+                    selection_mode="single-row",
+                    on_select="rerun",
+                    key=clave_tabla,
                     column_config={
                         "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
@@ -725,10 +718,22 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                         "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
                     }
                 )
+                
+                if evento:
+                    filas_seleccionadas = evento.get("selection", {}).get("rows", [])
+                    if filas_seleccionadas:
+                        indice_fila = filas_seleccionadas[0]
+                        nombre_empresa_tocada = df_display.iloc[indice_fila]['Ticker']
+                        datos_empresa = next((item for item in st.session_state['resultados'] if item["nombre"] == nombre_empresa_tocada), None)
+                        if datos_empresa:
+                            st.session_state['empresa_modal'] = datos_empresa
 
             mostrar_tabla_interactiva(df_menos_1, "Acciones Menores a 1 USD", "tabla_menos_1")
             st.markdown("<br>", unsafe_allow_html=True)
             mostrar_tabla_interactiva(df_mas_1, "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
+
+            if st.session_state['empresa_modal'] is not None:
+                mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
     st.info("👈 Selecciona una fecha en el calendario de la barra lateral y presiona 'Analizar Carpeta'.")
