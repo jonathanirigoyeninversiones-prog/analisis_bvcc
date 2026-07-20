@@ -17,19 +17,16 @@ st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide"
 # ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE)
 st.markdown("""
 <style>
-    /* Fondo General Negro AMOLED */
     .stApp {
         background-color: #030712;
         color: #f3f4f6;
     }
     
-    /* Personalización del Sidebar */
     section[data-testid="stSidebar"] {
         background-color: #090d16 !important;
         border-right: 1px solid #1f2937;
     }
 
-    /* Estilos del Modal */
     div[role="dialog"] {
         background-color: #090d16 !important;
         border: 1px solid #374151 !important;
@@ -37,7 +34,6 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* Tarjeta resumida del Modal */
     .header-card {
         background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
         border: 1px solid #374151;
@@ -81,7 +77,6 @@ st.markdown("""
         letter-spacing: 0.08em;
     }
 
-    /* Tarjetas de Resumen en Pantalla Principal (KPIs) */
     .kpi-card {
         background: #0f172a;
         border: 1px solid #1e293b;
@@ -104,7 +99,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Función para formatear números en Bs ---
+# --- MEMORIA PARA INDICADORES SELECCIONADOS ---
+if 'indicadores_activos' not in st.session_state:
+    st.session_state['indicadores_activos'] = []
+
 def fmt_bs(valor):
     if pd.isna(valor) or valor is None:
         return "0,00"
@@ -115,7 +113,6 @@ def fmt_bs(valor):
     except:
         return "0,00"
 
-# --- Obtener el dólar oficial ---
 def obtener_dolar_oficial():
     apis = [
         {"url": "https://api.exchangerate.host/latest?base=USD&symbols=VES", "parse": lambda data: (data["rates"]["VES"], data.get("date", ""))},
@@ -140,9 +137,6 @@ def obtener_dolar_oficial():
 def get_dolar_con_cache():
     return obtener_dolar_oficial()
 
-# -------------------------------------------------------------------
-# 1. TEMPORALIDADES (RESAMPLING)
-# -------------------------------------------------------------------
 def cambiar_temporalidad(df, temporalidad):
     df = df.copy()
     df['Date'] = pd.to_datetime(df['Date'])
@@ -164,7 +158,7 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# 2. CÁLCULO DE INDICADORES
+# CÁLCULO DE LA SUITE COMPLETA DE INDICADORES ESTILO TRADINGVIEW
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -182,7 +176,6 @@ def calcular_indicadores(df):
 
     rs = avg_gain / avg_loss
     rsi_raw = 100 - (100 / (1 + rs))
-    
     df['RSI'] = rsi_raw.ewm(span=3, adjust=False).mean()
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
@@ -191,18 +184,26 @@ def calcular_indicadores(df):
     df['BB_lower'] = df['SMA20'] - (2 * df['STD20'])
     df['BB_upper'] = df['SMA20'] + (2 * df['STD20'])
 
+    # EMAs
+    df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
-    df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
+    df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
+    # MACD
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
     ema26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
 
+    # VWAP (Volume Weighted Average Price)
+    tp = (df['High'] + df['Low'] + df['Close']) / 3
+    df['VWAP'] = (tp * df['Volume']).cumsum() / df['Volume'].cumsum()
+
+    # ATR
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -210,63 +211,144 @@ def calcular_indicadores(df):
     true_range = np.max(ranges, axis=1)
     df['ATR14'] = true_range.rolling(14).mean()
 
+    # SUPERTREND
+    multiplier = 3
+    period = 10
+    hl2 = (df['High'] + df['Low']) / 2
+    df['ATR_ST'] = true_range.rolling(period).mean()
+    df['Basic_Upper'] = hl2 + (multiplier * df['ATR_ST'])
+    df['Basic_Lower'] = hl2 - (multiplier * df['ATR_ST'])
+    
+    supertrend = [0.0] * len(df)
+    direction = [1] * len(df)
+    for i in range(1, len(df)):
+        if df['Close'].iloc[i] > df['Basic_Upper'].iloc[i-1]:
+            direction[i] = 1
+        elif df['Close'].iloc[i] < df['Basic_Lower'].iloc[i-1]:
+            direction[i] = -1
+        else:
+            direction[i] = direction[i-1]
+            if direction[i] == 1 and df['Basic_Lower'].iloc[i] < df['Basic_Lower'].iloc[i-1]:
+                df.loc[i, 'Basic_Lower'] = df['Basic_Lower'].iloc[i-1]
+            if direction[i] == -1 and df['Basic_Upper'].iloc[i] > df['Basic_Upper'].iloc[i-1]:
+                df.loc[i, 'Basic_Upper'] = df['Basic_Upper'].iloc[i-1]
+        supertrend[i] = df['Basic_Lower'].iloc[i] if direction[i] == 1 else df['Basic_Upper'].iloc[i]
+    df['Supertrend'] = supertrend
+    df['ST_Direction'] = direction
+
+    # PARABOLIC SAR
+    psar = df['Close'].copy()
+    af = 0.02
+    max_af = 0.2
+    is_long = True
+    ep = df['High'].iloc[0]
+    sar = df['Low'].iloc[0]
+    
+    for i in range(2, len(df)):
+        if is_long:
+            sar = sar + af * (ep - sar)
+            sar = min(sar, df['Low'].iloc[i-1], df['Low'].iloc[i-2])
+            if df['Low'].iloc[i] < sar:
+                is_long = False
+                sar = ep
+                ep = df['Low'].iloc[i]
+                af = 0.02
+            else:
+                if df['High'].iloc[i] > ep:
+                    ep = df['High'].iloc[i]
+                    af = min(af + 0.02, max_af)
+        else:
+            sar = sar + af * (ep - sar)
+            sar = max(sar, df['High'].iloc[i-1], df['High'].iloc[i-2])
+            if df['High'].iloc[i] > sar:
+                is_long = True
+                sar = ep
+                ep = df['High'].iloc[i]
+                af = 0.02
+            else:
+                if df['Low'].iloc[i] < ep:
+                    ep = df['Low'].iloc[i]
+                    af = min(af + 0.02, max_af)
+        psar.iloc[i] = sar
+    df['Parabolic_SAR'] = psar
+
     return df
 
 # -------------------------------------------------------------------
-# 3. DISEÑO GRÁFICO DEL MODAL
+# MOTOR GRÁFICO DINÁMICO
 # -------------------------------------------------------------------
-def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
+def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados):
     df_plot = df.tail(100).copy()
 
-    fig = make_subplots(
-        rows=3, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.03, 
-        subplot_titles=('PRECIO', 'VOLUMEN', 'MACD'),
-        row_width=[0.20, 0.20, 0.60]
-    )
+    # Configuración de subgráficos dinámicos según si seleccionaste osciladores inferiores
+    subpaneles = [ind for ind in indicadores_seleccionados if ind in ["MACD", "RSI (14)"]]
+    num_subpaneles = len(subpaneles)
+
+    if num_subpaneles == 1:
+        fig = make_subplots(
+            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
+            subplot_titles=('PRECIO', subpaneles[0]), row_width=[0.25, 0.75]
+        )
+    elif num_subpaneles >= 2:
+        fig = make_subplots(
+            rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
+            subplot_titles=('PRECIO', subpaneles[0], subpaneles[1]), row_width=[0.20, 0.20, 0.60]
+        )
+    else:
+        fig = make_subplots(
+            rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
+            subplot_titles=('PRECIO', 'VOLUMEN'), row_width=[0.25, 0.75]
+        )
 
     # 1. VELAS JAPONESAS
     fig.add_trace(go.Candlestick(
         x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
-        name='Precio',
-        increasing_line_color='#10b981', decreasing_line_color='#f43f5e',
+        name='Precio', increasing_line_color='#10b981', decreasing_line_color='#f43f5e',
         increasing_fillcolor='#10b981', decreasing_fillcolor='#f43f5e'
     ), row=1, col=1)
 
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.2), name='EMA 30'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#fb7185', width=1.2), name='EMA 60'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.15)', width=1, dash='dot'), name='BB Sup'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.15)', width=1, dash='dot'), name='BB Inf'), row=1, col=1)
+    # --- INDICADORES SUPERPUESTOS SOBRE EL PRECIO ---
+    if "EMAs (30/60)" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.2), name='EMA 30'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#fb7185', width=1.2), name='EMA 60'), row=1, col=1)
 
-    # 2. VOLUMEN
-    colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], 'rgba(16, 185, 129, 0.6)', 'rgba(244, 63, 94, 0.6)')
-    fig.add_trace(go.Bar(
-        x=df_plot['Date'], y=df_plot['Volume'],
-        marker_color=colores_volumen, name='Volumen'
-    ), row=2, col=1)
+    if "EMA Rápida (9)" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA9'], line=dict(color='#facc15', width=1.2), name='EMA 9'), row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=df_plot['Date'], y=df_plot['Vol_MA20'],
-        line=dict(color='#f59e0b', width=1.2), name='Vol MA20'
-    ), row=2, col=1)
+    if "EMA Larga (200)" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA200'], line=dict(color='#a855f7', width=1.5), name='EMA 200'), row=1, col=1)
 
-    # 3. MACD
-    colores_hist = np.where(df_plot['MACD_Hist'] >= 0, 'rgba(16, 185, 129, 0.5)', 'rgba(244, 63, 94, 0.5)')
-    fig.add_trace(go.Bar(
-        x=df_plot['Date'], y=df_plot['MACD_Hist'],
-        marker_color=colores_hist, name='Hist'
-    ), row=3, col=1)
+    if "Bandas Bollinger" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dot'), name='BB Sup'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dot'), name='BB Inf'), row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=df_plot['Date'], y=df_plot['MACD'],
-        line=dict(color='#38bdf8', width=1.2), name='MACD'
-    ), row=3, col=1)
+    if "Supertrend" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Supertrend'], mode='lines', line=dict(color='#a855f7', width=2), name='Supertrend'), row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=df_plot['Date'], y=df_plot['MACD_Signal'],
-        line=dict(color='#fb923c', width=1.2), name='Signal'
-    ), row=3, col=1)
+    if "VWAP" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['VWAP'], line=dict(color='#3b82f6', width=1.5), name='VWAP'), row=1, col=1)
+
+    if "Parabolic SAR" in indicadores_seleccionados:
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Parabolic_SAR'], mode='markers', marker=dict(color='#f97316', size=3), name='SAR'), row=1, col=1)
+
+    # 2. PANEL SECUNDARIO / VOLUMEN O PANELES INFERIORES
+    fila_actual = 2
+    if num_subpaneles == 0:
+        colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], 'rgba(16, 185, 129, 0.6)', 'rgba(244, 63, 94, 0.6)')
+        fig.add_trace(go.Bar(x=df_plot['Date'], y=df_plot['Volume'], marker_color=colores_volumen, name='Volumen'), row=fila_actual, col=1)
+        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Vol_MA20'], line=dict(color='#f59e0b', width=1.2), name='Vol MA20'), row=fila_actual, col=1)
+    
+    for sub in subpaneles:
+        if sub == "MACD":
+            colores_hist = np.where(df_plot['MACD_Hist'] >= 0, 'rgba(16, 185, 129, 0.5)', 'rgba(244, 63, 94, 0.5)')
+            fig.add_trace(go.Bar(x=df_plot['Date'], y=df_plot['MACD_Hist'], marker_color=colores_hist, name='Hist'), row=fila_actual, col=1)
+            fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['MACD'], line=dict(color='#38bdf8', width=1.2), name='MACD'), row=fila_actual, col=1)
+            fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['MACD_Signal'], line=dict(color='#fb923c', width=1.2), name='Signal'), row=fila_actual, col=1)
+        elif sub == "RSI (14)":
+            fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['RSI'], line=dict(color='#facc15', width=1.5, shape='spline'), name='RSI'), row=fila_actual, col=1)
+            fig.add_hline(y=70, line_dash="dot", row=fila_actual, col=1, line_color="rgba(244, 63, 94, 0.5)")
+            fig.add_hline(y=30, line_dash="dot", row=fila_actual, col=1, line_color="rgba(16, 185, 129, 0.5)")
+        fila_actual += 1
 
     fig.update_layout(
         height=720, 
@@ -288,7 +370,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     return fig
 
 # -------------------------------------------------------------------
-# 4. LEER Y PROCESAR ARCHIVO CSV
+# PROCESAMIENTO CSV
 # -------------------------------------------------------------------
 def analizar_archivo(ruta_archivo, fecha_referencia):
     try:
@@ -299,7 +381,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
         df = df.dropna(subset=['Close', 'High', 'Low', 'Open'])
-
         if len(df) < 30:
             return None
 
@@ -308,13 +389,12 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
 
         fecha_limite = pd.to_datetime(fecha_referencia)
         df = df[df['Date'] <= fecha_limite]
-
         if df.empty:
             return None
 
         df = df.sort_values('Date').reset_index(drop=True)
-
         df_con_volumen = df[df['Volume'] > 0]
+        
         if df_con_volumen.empty:
             ultimo = df.iloc[-1]
             fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
@@ -323,60 +403,35 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
 
         df_calculado = calcular_indicadores(df.copy())
-
         ultimo_fila = df_calculado[df_calculado['Date'] == ultimo['Date']]
-        if ultimo_fila.empty:
-            ultimo_datos = df_calculado.iloc[-1]
-        else:
-            ultimo_datos = ultimo_fila.iloc[-1]
+        ultimo_datos = df_calculado.iloc[-1] if ultimo_fila.empty else ultimo_fila.iloc[-1]
 
         puntaje = 0
-
         if ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
             puntaje += 25
-
         if not pd.isna(ultimo_datos['EMA60']) and ultimo_datos['EMA60'] > 0:
             distancia_ema = ((ultimo_datos['EMA60'] - ultimo_datos['Close']) / ultimo_datos['EMA60']) * 100
             if distancia_ema > 0:
-                pts_ema = min(distancia_ema * 1.6, 40)
-                puntaje += pts_ema
-
+                puntaje += min(distancia_ema * 1.6, 40)
         if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] < ultimo_datos['BB_lower']:
             puntaje += 15
 
         rsi_hoy = ultimo_datos['RSI']
         rsi_ayer = ultimo_datos['RSI_Anterior']
         if not pd.isna(rsi_hoy):
-            distancia_al_30 = abs(rsi_hoy - 30)
-            pts_nivel = max(0, 10 - distancia_al_30)
-            puntaje += pts_nivel
-
-        if not pd.isna(rsi_hoy) and not pd.isna(rsi_ayer):
-            if rsi_hoy > rsi_ayer and rsi_hoy < 40:
-                puntaje += 10
+            puntaje += max(0, 10 - abs(rsi_hoy - 30))
+        if not pd.isna(rsi_hoy) and not pd.isna(rsi_ayer) and rsi_hoy > rsi_ayer and rsi_hoy < 40:
+            puntaje += 10
 
         if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
             target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
             upside = ((target - ultimo_datos['Close']) / ultimo_datos['Close']) * 100
-            if upside > 20:
-                puntaje += 10
-            elif upside > 10:
-                puntaje += 5
+            puntaje += 10 if upside > 20 else (5 if upside > 10 else 0)
         else:
-            target = 0
-            upside = 0
-
-        if 'EMA100' in ultimo_datos and not pd.isna(ultimo_datos['EMA100']) and ultimo_datos['Close'] < ultimo_datos['EMA100']:
-            puntaje += 5
+            target, upside = 0, 0
 
         puntaje = min(puntaje, 100)
-
-        if puntaje >= 60 and ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
-            estado = 'COMPRA'
-        elif puntaje >= 35:
-            estado = 'SEGUIMIENTO'
-        else:
-            estado = 'ESPERAR'
+        estado = 'COMPRA' if (puntaje >= 60 and ultimo_datos['EMA30'] < ultimo_datos['EMA60']) else ('SEGUIMIENTO' if puntaje >= 35 else 'ESPERAR')
 
         return {
             'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
@@ -385,24 +440,18 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             'precio': float(ultimo_datos['Close']),
             'target': float(target),
             'upside': float(upside),
-            'rsi': round(rsi_hoy, 2) if not pd.isna(rsi_hoy) else 0,
-            'rsi_ayer': round(rsi_ayer, 2) if not pd.isna(rsi_ayer) else 0,
-            'ema30': float(ultimo_datos['EMA30']) if not pd.isna(ultimo_datos['EMA30']) else 0,
-            'ema60': float(ultimo_datos['EMA60']) if not pd.isna(ultimo_datos['EMA60']) else 0,
-            'fecha_ultimo': fecha_ultimo_operado,
             'df_original': df
         }
-
-    except Exception as e:
+    except Exception:
         return None
 
 # -------------------------------------------------------------------
-# 5. MODAL ELEGANTE
+# MODAL AVANZADO CON SELECTOR MULTI-INDICADOR ÉLITE
 # -------------------------------------------------------------------
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
 
-@st.dialog(" Análitica de Mercado", width="large")
+@st.dialog(" Terminal Analítico Gráfico", width="large")
 def mostrar_modal_grafico(datos_empresa):
     dolar, _ = get_dolar_con_cache()
     precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
@@ -430,13 +479,23 @@ def mostrar_modal_grafico(datos_empresa):
     </div>
     """, unsafe_allow_html=True)
 
-    col_temp, col_esp = st.columns([2, 3])
+    col_temp, col_ind = st.columns([1, 2])
     with col_temp:
         temporalidad = st.radio("Temporalidad", ["1 Día", "1 Semana", "1 Mes"], horizontal=True, label_visibility="collapsed")
 
+    with col_ind:
+        # SELECTOR DE INDICADORES ÉLITE (CONSERVA TUS ELECCIONES AL CERRAR/ABRIR)
+        indicadores_seleccionados = st.multiselect(
+            "Seleccionar Indicadores:",
+            ["EMAs (30/60)", "EMA Rápida (9)", "EMA Larga (200)", "Bandas Bollinger", "Supertrend", "VWAP", "Parabolic SAR", "MACD", "RSI (14)"],
+            default=st.session_state['indicadores_activos'],
+            placeholder="Añadir indicadores técnicos..."
+        )
+        st.session_state['indicadores_activos'] = indicadores_seleccionados
+
     df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
     df_indicadores = calcular_indicadores(df_convertido)
-    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad)
+    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad, indicadores_seleccionados)
     
     st.plotly_chart(
         fig, 
@@ -445,7 +504,7 @@ def mostrar_modal_grafico(datos_empresa):
     )
 
 # -------------------------------------------------------------------
-# 6. INTERFAZ PRINCIPAL
+# INTERFAZ PRINCIPAL
 # -------------------------------------------------------------------
 st.sidebar.subheader("📥 Análisis de Mercado")
 fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
@@ -463,7 +522,6 @@ if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
 st.sidebar.divider()
 btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary")
 
-# --- CABECERA PRINCIPAL ---
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
@@ -551,7 +609,6 @@ if st.session_state.get('analizado', False):
                 return
             
             df_display = df.copy()
-            
             df_display['estado_visual'] = df_display['estado'].apply(
                 lambda x: '✅ COMPRA' if 'COMPRA' in x else ('🔍 SEGUIMIENTO' if 'SEGUIMIENTO' in x else '⏸️ ESPERAR')
             )
