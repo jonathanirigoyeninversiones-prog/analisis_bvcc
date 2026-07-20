@@ -20,7 +20,7 @@ jobs:
       - name: Instalar Dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install pandas requests yfinance
+          pip install pandas requests yfinance tradingview-screener
 
       - name: Ejecutar Descargador BVC
         run: python descargador_cascada.py
