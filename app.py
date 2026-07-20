@@ -104,7 +104,7 @@ st.markdown("""
 """)
 
 # -------------------------------------------------------------------
-# 1. FUNCIÓN DE AGRUPACIÓN POR TEMPORALIDAD (RESAMPLING)
+# 1. FUNCIÓN DE AGRUPACIÓN POR TEMPORALIDAD
 # -------------------------------------------------------------------
 def cambiar_temporalidad(df, temporalidad):
     df = df.copy()
@@ -135,7 +135,7 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# 2. CÁLCULO DE INDICADORES
+# 2. CÁLCULO DE INDICADORES (INCLUYE MA 20 DE VOLUMEN)
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -164,6 +164,9 @@ def calcular_indicadores(df):
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
 
+    # --- MA 20 para el Volumen ---
+    df['Vol_MA20'] = df['Volume'].rolling(20).mean()
+
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -174,18 +177,17 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA PROFESIONAL
+# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA PERSONALIZADA
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
-    df_plot = df.tail(90).copy() # Mostrar últimos 90 registros para mejor definición visual
+    df_plot = df.tail(90).copy()
 
-    # Creamos un diseño de 3 filas (Precio 60%, Volumen 15%, RSI 25%)
     fig = make_subplots(
         rows=3, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.03, 
-        subplot_titles=(f'Gráfico Técnico ({temporalidad}) - {nombre_empresa}', 'Volumen de Transacciones', 'Fuerza Relativa RSI (14)'),
-        row_width=[0.22, 0.15, 0.63]
+        subplot_titles=(f'Gráfico Técnico ({temporalidad}) - {nombre_empresa}', 'Volumen (Área Gris 30% + MA 20)', 'Fuerza Relativa RSI (14) - Amarillo'),
+        row_width=[0.22, 0.18, 0.60]
     )
 
     # 1. VELAS JAPONESAS (Fila 1)
@@ -196,29 +198,46 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
         increasing_fillcolor='#22c55e', decreasing_fillcolor='#ef4444'
     ), row=1, col=1)
 
-    # Indicadores encima del precio
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.5), name='EMA 30'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#f43f5e', width=1.5), name='EMA 60'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
 
-    # 2. INDICADOR DE VOLUMEN CON COLORES DINÁMICOS (Fila 2)
-    # Si Cierre >= Apertura -> Verde, si no -> Rojo
+    # 2. VOLUMEN CON ÁREA GRIS (30% OPACIDAD) Y MA 20 (Fila 2)
+    # Área de fondo gris al 30%
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['Volume'],
+        fill='tozeroy',
+        fillcolor='rgba(128, 128, 128, 0.3)', # Gris con 30% opacidad
+        line=dict(color='rgba(128, 128, 128, 0.5)', width=1),
+        name='Área Volumen'
+    ), row=2, col=1)
+
+    # Barras de volumen
     colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], '#22c55e', '#ef4444')
     fig.add_trace(go.Bar(
         x=df_plot['Date'], y=df_plot['Volume'],
-        marker_color=colores_volumen, name='Volumen',
-        opacity=0.8
+        marker_color=colores_volumen, name='Volumen', opacity=0.7
     ), row=2, col=1)
 
-    # 3. GRÁFICO DEL RSI (Fila 3)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['RSI'], line=dict(color='#a855f7', width=2), name='RSI'), row=3, col=1)
+    # Línea de MA 20 de Volumen
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['Vol_MA20'],
+        line=dict(color='#f59e0b', width=1.5), name='Vol MA 20'
+    ), row=2, col=1)
+
+    # 3. RSI COLOR AMARILLO (Fila 3)
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['RSI'],
+        line=dict(color='#facc15', width=2), # Color Amarillo
+        name='RSI 14'
+    ), row=3, col=1)
+    
     fig.add_hline(y=70, line_dash="dash", row=3, col=1, line_color="#ef4444", line_width=1)
     fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
 
-    # Estilo y diseño oscuro idéntico a TradingView
     fig.update_layout(
-        height=750, 
+        height=780, 
         template='plotly_dark', 
         xaxis_rangeslider_visible=False,
         margin=dict(l=40, r=40, t=50, b=30),
@@ -412,7 +431,7 @@ if st.session_state.get('analizado', False):
         mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
         mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-        # --- SECCIÓN DE GRÁFICO INTERACTIVO MULTI-TEMPORALIDAD ---
+        # --- SECCIÓN DE GRÁFICO INTERACTIVO ---
         st.divider()
         st.subheader("📈 Analizador Gráfico de Acción Multi-Temporalidad")
         
