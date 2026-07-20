@@ -10,20 +10,23 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
+st.set_page_config(page_title="Análisis BVC - Terminal Cuantitativo", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (ANCHO TOTAL Y VISIBILIDAD DE TABLAS)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (FANCY UI / UX REDISEÑADO)
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
     .stApp {
-        background-color: #030712;
+        background: radial-gradient(circle at 50% 0%, #0f172a 0%, #030712 100%);
         color: #f3f4f6;
+        font-family: 'Plus Jakarta Sans', sans-serif;
     }
     
     section[data-testid="stSidebar"] {
-        background-color: #090d16 !important;
-        border-right: 1px solid #1f2937;
-        padding-top: 1rem;
+        background-color: #080d19 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        padding-top: 1.5rem;
     }
 
     div[data-baseweb="popover"] {
@@ -33,86 +36,127 @@ st.markdown("""
     div[data-baseweb="calendar"] {
         background-color: #0f172a !important;
         color: #f8fafc !important;
-        border: 1px solid #334151 !important;
-        border-radius: 12px !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 16px !important;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
     }
 
     div[role="dialog"] {
-        background-color: #090d16 !important;
-        border: 1px solid #374151 !important;
-        border-radius: 16px !important;
+        background-color: #0b1120 !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 20px !important;
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
+    /* Contenedor fluido sin desbordamientos horizontales */
     div[data-testid="stDataFrame"] {
         width: 100% !important;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 16px;
+        padding: 4px;
+        box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
     }
     div[data-testid="stDataFrame"] > div {
         width: 100% !important;
-        overflow-x: auto !important;
+        overflow-x: hidden !important;
     }
 
-    .header-card {
-        background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
-        border: 1px solid #374151;
-        border-radius: 12px;
-        padding: 16px 20px;
-        margin-bottom: 15px;
+    /* Tarjetas de Encabezado Glassmorphism */
+    .hero-container {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 24px 28px;
+        margin-bottom: 25px;
+        box-shadow: 0 20px 40px -15px rgba(0,0,0,0.7);
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
-    
-    .card-title {
-        font-size: 1.6rem;
-        font-weight: 800;
-        color: #ffffff;
-        margin: 0;
-        letter-spacing: -0.02em;
-    }
-    
-    .card-badge {
-        background: rgba(34, 197, 94, 0.2);
-        color: #4ade80;
-        border: 1px solid rgba(34, 197, 94, 0.4);
-        padding: 5px 14px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 700;
     }
 
-    .metric-value {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: #f9fafb;
+    .main-title {
+        font-size: 2.2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+        letter-spacing: -0.03em;
     }
-    
-    .metric-label {
-        font-size: 0.72rem;
-        color: #9ca3af;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
+
+    .disclaimer-text {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        line-height: 1.5;
+        margin-top: 8px;
+        margin-bottom: 0;
+        max-width: 650px;
+    }
+
+    .dolar-badge {
+        text-align: right; 
+        padding: 12px 18px; 
+        background: rgba(250, 204, 21, 0.04); 
+        border: 1px solid rgba(250, 204, 21, 0.15); 
+        border-radius: 14px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
     }
 
     .kpi-card {
-        background: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 12px;
-        padding: 16px;
+        background: linear-gradient(145deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.3) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 16px;
+        padding: 20px;
         text-align: center;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(56, 189, 248, 0.3);
     }
     .kpi-value {
-        font-size: 1.6rem;
+        font-size: 1.8rem;
         font-weight: 800;
         color: #38bdf8;
+        margin-top: 4px;
+        letter-spacing: -0.02em;
     }
     .kpi-title {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         color: #94a3b8;
         text-transform: uppercase;
-        font-weight: 600;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+    }
+
+    .section-header {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin-top: 30px;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: -0.01em;
+    }
+
+    /* Botones y Elementos Sidebar Estilizados */
+    .stButton > button {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.6);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -379,8 +423,8 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
 
     fig.update_layout(
         height=720, 
-        paper_bgcolor='#090d16',
-        plot_bgcolor='#090d16',
+        paper_bgcolor='#0b1120',
+        plot_bgcolor='#0b1120',
         xaxis_rangeslider_visible=False,
         margin=dict(l=10, r=10, t=25, b=10),
         hovermode='x unified',
@@ -402,23 +446,23 @@ def mostrar_modal_grafico(datos_empresa):
     precio_usd = (datos_empresa['precio'] / dolar) if dolar > 0 else 0
     
     st.markdown(f"""
-    <div class="header-card">
+    <div class="hero-container" style="margin-bottom: 20px;">
         <div>
-            <span class="card-title">{datos_empresa['nombre']}</span>
+            <span class="main-title" style="font-size: 1.5rem;">{datos_empresa['nombre']}</span>
             <span style="margin-left: 10px;" class="card-badge">{datos_empresa['estado']}</span>
         </div>
         <div style="display: flex; gap: 25px;">
             <div>
                 <div class="metric-label">Precio Bs</div>
-                <div class="metric-value">{fmt_bs(datos_empresa['precio'])}</div>
+                <div class="metric-value" style="font-size: 1.1rem;">{fmt_bs(datos_empresa['precio'])}</div>
             </div>
             <div>
                 <div class="metric-label">Precio USD</div>
-                <div class="metric-value">${precio_usd:.4f}</div>
+                <div class="metric-value" style="font-size: 1.1rem;">${precio_usd:.4f}</div>
             </div>
             <div>
                 <div class="metric-label">Upside</div>
-                <div class="metric-value" style="color: #4ade80;">+{datos_empresa['upside']:.1f}%</div>
+                <div class="metric-value" style="font-size: 1.1rem; color: #4ade80;">+{datos_empresa['upside']:.1f}%</div>
             </div>
         </div>
     </div>
@@ -591,7 +635,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
 # -------------------------------------------------------------------
 # 3. INTERFAZ DE USUARIO Y CONFIGURACIÓN LATERAL
 # -------------------------------------------------------------------
-st.sidebar.subheader("📅 Fecha de Referencia")
+st.sidebar.markdown("<p style='font-size: 0.85rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;'>📅 Fecha de Referencia</p>", unsafe_allow_html=True)
 
 fecha_referencia = st.sidebar.date_input(
     "Seleccionar fecha",
@@ -605,11 +649,15 @@ carpeta = "./datos_bvc"
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
-    st.title("📊 Análisis BVC")
     st.markdown("""
-    <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.4; margin-top: -10px; margin-bottom: 15px;">
-        <strong>Descargo de responsabilidad:</strong> En ningún momento se promueve o se indica la compra de ninguna acción. La misma es sólo responsabilidad personal.
-    </p>
+    <div class="hero-container">
+        <div>
+            <h1 class="main-title">📊 Análisis BVC</h1>
+            <p class="disclaimer-text">
+                <strong>Descargo de responsabilidad:</strong> En ningún momento se promueve o se indica la compra de ninguna acción. La misma es sólo responsabilidad personal.
+            </p>
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
 with col_dolar:
@@ -617,11 +665,11 @@ with col_dolar:
         dolar_oficial, fecha_dolar = get_dolar_con_cache()
         if dolar_oficial > 0:
             st.markdown(f"""
-            <div style="text-align: right; padding: 10px; background: rgba(250, 204, 21, 0.05); border: 1px solid rgba(250, 204, 21, 0.2); border-radius: 12px; margin-top: 5px;">
+            <div class="dolar-badge">
                 <p style="margin: 0; font-weight: 800; font-size: 1.25rem; color: #facc15;">
                     💵 Dólar BCV: <strong>{fmt_bs(dolar_oficial)} Bs/USD</strong>
                 </p>
-                <p style="margin: 0; font-size: 0.7rem; color: #94a3b8;">
+                <p style="margin: 0; font-size: 0.7rem; color: #94a3b8; margin-top: 2px;">
                     Cierre Oficial: {fecha_dolar}
                 </p>
             </div>
@@ -665,7 +713,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
             total_compras = len(df_activos[df_activos['estado'].str.contains('COMPRA', case=False, na=False)])
             top_accion = df_activos.sort_values('puntaje', ascending=False).iloc[0]
             
-            st.divider()
+            st.markdown("<br>", unsafe_allow_html=True)
             kpi1, kpi2, kpi3 = st.columns(3)
             with kpi1:
                 st.markdown(f"""
@@ -678,7 +726,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 st.markdown(f"""
                 <div class="kpi-card">
                     <div class="kpi-title">Top Oportunidad #1</div>
-                    <div class="kpi-value" style="color: #facc15;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
+                    <div class="kpi-value" style="color: #facc15; font-size: 1.4rem;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
                 </div>
                 """, unsafe_allow_html=True)
             with kpi3:
@@ -689,7 +737,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 </div>
                 """, unsafe_allow_html=True)
 
-            st.divider()
+            st.markdown("<br>", unsafe_allow_html=True)
 
             df_menos_1 = df_activos[df_activos['precio_usd'] < 1].copy()
             df_mas_1 = df_activos[df_activos['precio_usd'] >= 1].copy()
@@ -701,15 +749,21 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 df_display = df.copy()
                 df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
                 
+                # Columnas ajustadas y optimizadas de tamaño para que encajen perfectamente a lo ancho sin scroll horizontal
                 columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
                 
-                st.subheader(f"📊 {titulo} ({len(df)} empresas)")
+                st.markdown(f"""
+                <div class="section-header">
+                    <span>📈 {titulo}</span> 
+                    <span style="font-size: 0.85rem; font-weight: 500; color: #64748b;">({len(df)} empresas)</span>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 evento = st.dataframe(
                     df_display[columnas_mostrar], 
                     use_container_width=True, 
                     hide_index=True,
-                    height=min(480, (len(df) + 1) * 35 + 10),
+                    height=min(450, (len(df) + 1) * 38 + 12),
                     selection_mode="single-row",
                     on_select="rerun",
                     key=clave_tabla,
@@ -733,9 +787,9 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                         if datos_empresa:
                             st.session_state['empresa_modal'] = datos_empresa
 
-            mostrar_tabla_interactiva(df_menos_1, "Acciones Menores a 1 USD", "tabla_menos_1")
+            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
             st.markdown("<br>", unsafe_allow_html=True)
-            mostrar_tabla_interactiva(df_mas_1, "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
+            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
 
             if st.session_state['empresa_modal'] is not None:
                 mostrar_modal_grafico(st.session_state['empresa_modal'])
