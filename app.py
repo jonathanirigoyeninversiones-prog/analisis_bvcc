@@ -411,7 +411,7 @@ def mostrar_modal_grafico(datos_empresa):
     <div class="header-card">
         <div>
             <span class="card-title">{datos_empresa['nombre']}</span>
-            <span style="margin-left: 10px;" class="card-badge">{datos_empresa['estado']}</span>
+            <span style="margin-left: 10px;" class="card-badge">✅ {datos_empresa['estado']}</span>
         </div>
         <div style="display: flex; gap: 25px;">
             <div>
@@ -445,7 +445,7 @@ def mostrar_modal_grafico(datos_empresa):
     )
 
 # -------------------------------------------------------------------
-# 6. INTERFAZ PRINCIPAL CON ESTILO BLOOMBERG / TRADINGVIEW
+# 6. INTERFAZ PRINCIPAL
 # -------------------------------------------------------------------
 st.sidebar.subheader("📥 Control del Mercado")
 fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
@@ -514,8 +514,8 @@ if st.session_state.get('analizado', False):
     if dolar > 0:
         df_resultados['precio_usd'] = df_resultados['precio'] / dolar
 
-        # TARJETAS DESTACADAS KPI EN CABECERA
-        total_compras = len(df_resultados[df_resultados['estado'] == 'COMPRA'])
+        # CONTEO EXACTO DE OPORTUNIDADES DE COMPRA (SIN DEPENDER DE EMOJIS)
+        total_compras = len(df_resultados[df_resultados['estado'].str.contains('COMPRA', case=False, na=False)])
         top_accion = df_resultados.sort_values('puntaje', ascending=False).iloc[0]
         
         st.divider()
@@ -552,9 +552,15 @@ if st.session_state.get('analizado', False):
                 return
             
             df_display = df.copy()
+            
+            # FORMATO CON EMOJIS VISUALES PARA LA TABLA
+            df_display['estado_visual'] = df_display['estado'].apply(
+                lambda x: '✅ COMPRA' if 'COMPRA' in x else ('🔍 SEGUIMIENTO' if 'SEGUIMIENTO' in x else '⏸️ ESPERAR')
+            )
+
             df_display = df_display.rename(columns={
                 'nombre': 'Ticker',
-                'estado': 'Recomendado',
+                'estado_visual': 'Recomendado',
                 'puntaje': 'Puntaje',
                 'precio': 'Precio (Bs)',
                 'precio_usd': 'Precio (USD)',
@@ -566,7 +572,6 @@ if st.session_state.get('analizado', False):
             
             st.subheader(f"📊 {titulo} ({len(df)} empresas)")
             
-            # FORMATO VISUAL ESTILO TRADINGVIEW / BLOOMBERG
             st.dataframe(
                 df_display[columnas], 
                 use_container_width=True, 
