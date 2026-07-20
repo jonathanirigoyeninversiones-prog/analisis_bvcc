@@ -642,7 +642,7 @@ if st.session_state.get('analizado', False):
             
             df_display = df.copy()
             df_display['estado_visual'] = df_display['estado'].apply(
-                lambda x: 'COMPRA' if 'COMPRA' in x else ('SEGUIM.' if 'SEGUIMIENTO' in x else 'ESPERAR')
+                lambda x: '✅ COMPRA' if 'COMPRA' in x else ('🔍 SEGUIMIENTO' if 'SEGUIMIENTO' in x else '⏸️ ESPERAR')
             )
 
             df_display = df_display.rename(columns={
@@ -669,13 +669,13 @@ if st.session_state.get('analizado', False):
                 key=clave_tabla,
                 column_config={
                     "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                    "Recomendación": st.column_config.TextColumn("Recomendación", width="small"),
+                    "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
                     "Puntaje": st.column_config.ProgressColumn(
                         "Puntaje",
                         format="%f pts",
                         min_value=0,
                         max_value=100,
-                        width="large"
+                        width="medium"
                     ),
                     "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
                     "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
