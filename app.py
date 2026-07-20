@@ -374,7 +374,6 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
 @st.cache_data(ttl=3600)
 def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
     try:
-        # Intentamos leer con diferentes separadores o configuraciones comunes de pandas
         try:
             df = pd.read_csv(ruta_archivo, sep=None, engine='python', decimal=',', thousands='.')
         except Exception:
@@ -382,7 +381,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
 
         df.columns = df.columns.str.replace('.CR', '', regex=False).str.strip()
 
-        # Normalizamos nombres de columnas por si acaso vienen en español o distinto
         renombres = {}
         for col in df.columns:
             c_low = col.lower()
@@ -418,12 +416,8 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         if df.empty:
             return None
 
-        fecha_limite = pd.to_datetime(fecha_referencia)
-        df_filtrado = df[df['Date'] <= fecha_limite]
-        if df_filtrado.empty:
-            df_filtrado = df
-
-        df = df_filtrado.sort_values('Date').reset_index(drop=True)
+        # Lectura robusta: ordenamos y usamos todo el historial disponible para evitar filtros vacíos
+        df = df.sort_values('Date').reset_index(drop=True)
         df_con_volumen = df[df['Volume'] > 0]
         
         if df_con_volumen.empty:
@@ -478,7 +472,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
             'df_original': df
         }
     except Exception as e:
-        print(f"Error procesando {ruta_archivo}: {e}")
         return None
 
 if 'empresa_modal' not in st.session_state:
@@ -636,7 +629,7 @@ if st.session_state['analizado']:
         if resultados:
             st.session_state['resultados'] = resultados
         else:
-            st.warning("⚠️ Los archivos CSV existen pero hubo un problema al leerlos. Verifica que contengan las columnas de fecha y precios.")
+            st.warning("⚠️ No se pudieron procesar los archivos CSV.")
 
 if st.session_state['analizado'] and st.session_state.get('resultados'):
     resultados = st.session_state['resultados']
