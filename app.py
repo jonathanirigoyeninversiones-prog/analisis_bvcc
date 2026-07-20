@@ -374,62 +374,15 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
 @st.cache_data(ttl=3600)
 def analizar_archivo(ruta_archivo, lista_emas_tuple):
     try:
-        df = None
-        for sep_val in [None, ',', ';', '\t']:
-            try:
-                if sep_val is None:
-                    df = pd.read_csv(ruta_archivo, engine='python', decimal=',', thousands='.')
-                else:
-                    df = pd.read_csv(ruta_archivo, sep=sep_val, decimal=',', thousands='.')
-                if df is not None and len(df.columns) > 1:
-                    break
-            except Exception:
-                continue
-
-        if df is None or df.empty:
-            return None
-
-        df.columns = df.columns.str.replace('.CR', '', regex=False).str.strip()
-
-        renombres = {}
-        for col in df.columns:
-            c_low = str(col).lower()
-            if 'date' in c_low or 'fecha' in c_low:
-                renombres[col] = 'Date'
-            elif 'close' in c_low or 'cierre' in c_low:
-                renombres[col] = 'Close'
-            elif 'high' in c_low or 'max' in c_low:
-                renombres[col] = 'High'
-            elif 'low' in c_low or 'min' in c_low:
-                renombres[col] = 'Low'
-            elif 'open' in c_low or 'apertura' in c_low:
-                renombres[col] = 'Open'
-            elif 'vol' in c_low:
-                renombres[col] = 'Volume'
-        
-        df = df.rename(columns=renombres)
-
-        if 'Close' not in df.columns and len(df.columns) >= 5:
-            pos_cols = list(df.columns)
-            df = df.rename(columns={
-                pos_cols[0]: 'Date',
-                pos_cols[1]: 'Open',
-                pos_cols[2]: 'High',
-                pos_cols[3]: 'Low',
-                pos_cols[4]: 'Close',
-                pos_cols[5] if len(pos_cols) > 5 else pos_cols[-1]: 'Volume'
-            })
+        df = pd.read_csv(ruta_archivo, decimal=',', thousands='.')
+        df.columns = df.columns.str.replace('.CR', '').str.strip()
 
         for col in ['Close', 'High', 'Low', 'Open', 'Volume']:
             if col in df.columns:
-                if df[col].dtype == object:
-                    df[col] = df[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-            else:
-                df[col] = 0.0
 
-        df = df.dropna(subset=['Close'])
-        if len(df) < 1:
+        df = df.dropna(subset=['Close', 'High', 'Low', 'Open'])
+        if len(df) < 30:
             return None
 
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -451,11 +404,11 @@ def analizar_archivo(ruta_archivo, lista_emas_tuple):
 
         puntaje = 0
         
-        if not pd.isna(ultimo_datos.get('BB_lower', np.nan)) and ultimo_datos['Close'] <= (ultimo_datos['BB_lower'] * 1.05):
+        if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] <= (ultimo_datos['BB_lower'] * 1.05):
             puntaje += 35
 
-        rsi_hoy = ultimo_datos.get('RSI', 50)
-        rsi_ayer = ultimo_datos.get('RSI_Anterior', 50)
+        rsi_hoy = ultimo_datos['RSI']
+        rsi_ayer = ultimo_datos['RSI_Anterior']
         if not pd.isna(rsi_hoy):
             distancia_30 = abs(rsi_hoy - 30)
             if distancia_30 <= 10:
@@ -463,20 +416,19 @@ def analizar_archivo(ruta_archivo, lista_emas_tuple):
             if not pd.isna(rsi_ayer) and rsi_hoy > rsi_ayer:
                 puntaje += 15
 
-        vol_actual = ultimo_datos.get('Volume', 0)
-        vol_ma = ultimo_datos.get('Vol_MA20', 0)
+        vol_actual = ultimo_datos['Volume']
+        vol_ma = ultimo_datos['Vol_MA20']
         es_vela_verde = ultimo_datos['Close'] >= ultimo_datos['Open']
         
         if not pd.isna(vol_ma) and vol_ma > 0 and es_vela_verde:
             if vol_actual >= (vol_ma * 1.5):
                 puntaje += 25
 
-        atr = ultimo_datos.get('ATR14', 0)
-        if not pd.isna(atr) and atr > 0:
-            target = ultimo_datos['Close'] + (1.5 * atr)
+        if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
+            target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
             upside = ((target - ultimo_datos['Close']) / ultimo_datos['Close']) * 100
         else:
-            target, upside = ultimo_datos['Close'], 0
+            target, upside = 0, 0
 
         puntaje = min(puntaje, 100)
         
@@ -491,7 +443,7 @@ def analizar_archivo(ruta_archivo, lista_emas_tuple):
             'upside': float(upside),
             'df_original': df
         }
-    except Exception as e:
+    except Exception:
         return None
 
 if 'empresa_modal' not in st.session_state:
@@ -585,14 +537,14 @@ if 'ultima_actualizacion' not in st.session_state:
 
 st.sidebar.divider()
 if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
-    with st.spinner("Descargando datos históricos del mercado..."):
+    with st.spinner("Analizando y actualizando historial..."):
         try:
             subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
             st.session_state['ultima_actualizacion'] = datetime.now()
-            st.sidebar.success("🎉 ¡Historial actualizado con éxito!")
+            st.sidebar.success("🎉 ¡Historial actualizado!")
             st.rerun()
         except Exception as e:
-            st.sidebar.error(f"Error al actualizar: {e}")
+            st.sidebar.error(f"Error: {e}")
 
 st.sidebar.divider()
 
@@ -627,9 +579,8 @@ if st.session_state['analizado']:
     
     archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')] if os.path.exists(carpeta) else []
     
-    # Si la carpeta está vacía en la máquina virtual, ejecutamos el descargador automáticamente
     if not archivos:
-        with st.spinner("Generando y descargando datos en el servidor virtual..."):
+        with st.spinner("Descargando datos del mercado..."):
             try:
                 subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
                 archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')] if os.path.exists(carpeta) else []
@@ -637,10 +588,10 @@ if st.session_state['analizado']:
                 pass
 
     if not archivos:
-        st.warning("⚠️ No se encontraron archivos CSV. Haz clic en 'Actualizar Historial BVC'.")
+        st.warning("⚠️ No hay datos descargados. Presiona 'Actualizar Historial BVC'.")
     else:
         resultados = []
-        with st.spinner("Analizando mercado y calculando indicadores técnicos..."):
+        with st.spinner("Analizando..."):
             emas_tuple = tuple((item['periodo'], item['color']) for item in st.session_state['lista_emas'])
             for archivo in archivos:
                 res = analizar_archivo(os.path.join(carpeta, archivo), emas_tuple)
@@ -650,7 +601,7 @@ if st.session_state['analizado']:
         if resultados:
             st.session_state['resultados'] = resultados
         else:
-            st.warning("⚠️ No se pudieron procesar los archivos CSV.")
+            st.warning("No se pudieron procesar los archivos CSV.")
 
 if st.session_state['analizado'] and st.session_state.get('resultados'):
     resultados = st.session_state['resultados']
