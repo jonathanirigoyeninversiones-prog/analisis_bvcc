@@ -374,22 +374,52 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
 @st.cache_data(ttl=3600)
 def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
     try:
-        df = pd.read_csv(ruta_archivo, decimal=',', thousands='.')
-        df.columns = df.columns.str.replace('.CR', '').str.strip()
+        # Intentamos leer con diferentes separadores o configuraciones comunes de pandas
+        try:
+            df = pd.read_csv(ruta_archivo, sep=None, engine='python', decimal=',', thousands='.')
+        except Exception:
+            df = pd.read_csv(ruta_archivo)
+
+        df.columns = df.columns.str.replace('.CR', '', regex=False).str.strip()
+
+        # Normalizamos nombres de columnas por si acaso vienen en español o distinto
+        renombres = {}
+        for col in df.columns:
+            c_low = col.lower()
+            if 'date' in c_low or 'fecha' in c_low:
+                renombres[col] = 'Date'
+            elif 'close' in c_low or 'cierre' in c_low:
+                renombres[col] = 'Close'
+            elif 'high' in c_low or 'max' in c_low:
+                renombres[col] = 'High'
+            elif 'low' in c_low or 'min' in c_low:
+                renombres[col] = 'Low'
+            elif 'open' in c_low or 'apertura' in c_low:
+                renombres[col] = 'Open'
+            elif 'vol' in c_low:
+                renombres[col] = 'Volume'
+        
+        df = df.rename(columns=renombres)
 
         for col in ['Close', 'High', 'Low', 'Open', 'Volume']:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            if col in df.columns:
+                if df[col].dtype == object:
+                    df[col] = df[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            else:
+                df[col] = 0.0
 
         df = df.dropna(subset=['Close', 'High', 'Low', 'Open'])
-        if len(df) < 30:
+        if len(df) < 5:
             return None
 
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
         df = df.dropna(subset=['Date'])
+        if df.empty:
+            return None
 
         fecha_limite = pd.to_datetime(fecha_referencia)
         df_filtrado = df[df['Date'] <= fecha_limite]
-        
         if df_filtrado.empty:
             df_filtrado = df
 
@@ -407,11 +437,11 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
 
         puntaje = 0
         
-        if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] <= (ultimo_datos['BB_lower'] * 1.05):
+        if not pd.isna(ultimo_datos.get('BB_lower', np.nan)) and ultimo_datos['Close'] <= (ultimo_datos['BB_lower'] * 1.05):
             puntaje += 35
 
-        rsi_hoy = ultimo_datos['RSI']
-        rsi_ayer = ultimo_datos['RSI_Anterior']
+        rsi_hoy = ultimo_datos.get('RSI', 50)
+        rsi_ayer = ultimo_datos.get('RSI_Anterior', 50)
         if not pd.isna(rsi_hoy):
             distancia_30 = abs(rsi_hoy - 30)
             if distancia_30 <= 10:
@@ -419,19 +449,20 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
             if not pd.isna(rsi_ayer) and rsi_hoy > rsi_ayer:
                 puntaje += 15
 
-        vol_actual = ultimo_datos['Volume']
-        vol_ma = ultimo_datos['Vol_MA20']
+        vol_actual = ultimo_datos.get('Volume', 0)
+        vol_ma = ultimo_datos.get('Vol_MA20', 0)
         es_vela_verde = ultimo_datos['Close'] >= ultimo_datos['Open']
         
         if not pd.isna(vol_ma) and vol_ma > 0 and es_vela_verde:
             if vol_actual >= (vol_ma * 1.5):
                 puntaje += 25
 
-        if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
-            target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
+        atr = ultimo_datos.get('ATR14', 0)
+        if not pd.isna(atr) and atr > 0:
+            target = ultimo_datos['Close'] + (1.5 * atr)
             upside = ((target - ultimo_datos['Close']) / ultimo_datos['Close']) * 100
         else:
-            target, upside = 0, 0
+            target, upside = ultimo_datos['Close'], 0
 
         puntaje = min(puntaje, 100)
         
@@ -447,6 +478,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
             'df_original': df
         }
     except Exception as e:
+        print(f"Error procesando {ruta_archivo}: {e}")
         return None
 
 if 'empresa_modal' not in st.session_state:
@@ -576,7 +608,6 @@ with col_dolar:
 
 carpeta = "./datos_bvc"
 
-# Corrección automática: si la carpeta no existe o está vacía, ejecutamos el descargador automáticamente
 if st.session_state['analizado']:
     if not os.path.exists(carpeta):
         os.makedirs(carpeta, exist_ok=True)
@@ -584,7 +615,7 @@ if st.session_state['analizado']:
     archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')] if os.path.exists(carpeta) else []
     
     if not archivos:
-        with st.spinner("No se encontraron archivos locales. Descargando datos automáticamente..."):
+        with st.spinner("Descargando datos automáticamente..."):
             try:
                 subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
                 archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
@@ -592,7 +623,7 @@ if st.session_state['analizado']:
                 pass
 
     if not archivos:
-        st.warning("⚠️ No se pudieron obtener los archivos CSV. Por favor, haz clic en 'Actualizar Historial BVC' para forzar la descarga de los datos.")
+        st.warning("⚠️ No se encontraron archivos CSV en la carpeta `./datos_bvc`. Haz clic en 'Actualizar Historial BVC'.")
     else:
         resultados = []
         with st.spinner("Analizando mercado y calculando indicadores técnicos..."):
@@ -605,7 +636,7 @@ if st.session_state['analizado']:
         if resultados:
             st.session_state['resultados'] = resultados
         else:
-            st.warning("Los archivos existen pero no se pudieron procesar. Revisa el contenido de los CSV.")
+            st.warning("⚠️ Los archivos CSV existen pero hubo un problema al leerlos. Verifica que contengan las columnas de fecha y precios.")
 
 if st.session_state['analizado'] and st.session_state.get('resultados'):
     resultados = st.session_state['resultados']
