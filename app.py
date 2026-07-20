@@ -112,6 +112,12 @@ if 'lista_emas' not in st.session_state:
         {"periodo": 200, "color": "#a855f7"}
     ]
 
+if 'analizado' not in st.session_state:
+    st.session_state['analizado'] = False
+
+if 'resultados' not in st.session_state:
+    st.session_state['resultados'] = []
+
 def fmt_bs(valor):
     if pd.isna(valor) or valor is None:
         return "0,00"
