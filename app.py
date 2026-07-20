@@ -99,9 +99,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- MEMORIA PARA INDICADORES SELECCIONADOS ---
+# --- MEMORIA PARA INDICADORES Y EMAS DINÁMICAS ---
 if 'indicadores_activos' not in st.session_state:
     st.session_state['indicadores_activos'] = []
+
+if 'lista_emas' not in st.session_state:
+    # Configuramos 3 EMAs por defecto (ej: EMA 9, 30 y 60 con sus colores)
+    st.session_state['lista_emas'] = [
+        {"periodo": 9, "color": "#facc15"},
+        {"periodo": 30, "color": "#38bdf8"},
+        {"periodo": 60, "color": "#fb7185"}
+    ]
 
 def fmt_bs(valor):
     if pd.isna(valor) or valor is None:
@@ -158,9 +166,9 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# CÁLCULO DE LA SUITE COMPLETA DE INDICADORES ESTILO TRADINGVIEW
+# CÁLCULO DE INDICADORES (CON EMAS DINÁMICAS)
 # -------------------------------------------------------------------
-def calcular_indicadores(df):
+def calcular_indicadores(df, lista_emas):
     df = df.sort_values('Date').reset_index(drop=True)
 
     delta = df['Close'].diff()
@@ -184,11 +192,15 @@ def calcular_indicadores(df):
     df['BB_lower'] = df['SMA20'] - (2 * df['STD20'])
     df['BB_upper'] = df['SMA20'] + (2 * df['STD20'])
 
-    # EMAs
-    df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
+    # Calcular dinámicamente cada EMA solicitada por el usuario
+    for item in lista_emas:
+        p = int(item['periodo'])
+        if p > 0:
+            df[f'EMA_{p}'] = df['Close'].ewm(span=p, adjust=False).mean()
+
+    # Mantener referencias fijas para los cálculos de la tabla principal
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
-    df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
 
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
@@ -199,7 +211,7 @@ def calcular_indicadores(df):
     df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
 
-    # VWAP (Volume Weighted Average Price)
+    # VWAP
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     df['VWAP'] = (tp * df['Volume']).cumsum() / df['Volume'].cumsum()
 
@@ -277,10 +289,9 @@ def calcular_indicadores(df):
 # -------------------------------------------------------------------
 # MOTOR GRÁFICO DINÁMICO
 # -------------------------------------------------------------------
-def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados):
+def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
     df_plot = df.tail(100).copy()
 
-    # Configuración de subgráficos dinámicos según si seleccionaste osciladores inferiores
     subpaneles = [ind for ind in indicadores_seleccionados if ind in ["MACD", "RSI (14)"]]
     num_subpaneles = len(subpaneles)
 
@@ -307,16 +318,18 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
         increasing_fillcolor='#10b981', decreasing_fillcolor='#f43f5e'
     ), row=1, col=1)
 
-    # --- INDICADORES SUPERPUESTOS SOBRE EL PRECIO ---
-    if "EMAs (30/60)" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.2), name='EMA 30'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#fb7185', width=1.2), name='EMA 60'), row=1, col=1)
-
-    if "EMA Rápida (9)" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA9'], line=dict(color='#facc15', width=1.2), name='EMA 9'), row=1, col=1)
-
-    if "EMA Larga (200)" in indicadores_seleccionados:
-        fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA200'], line=dict(color='#a855f7', width=1.5), name='EMA 200'), row=1, col=1)
+    # --- DIBUJAR EMAS DINÁMICAS PERSONALIZADAS ---
+    if "EMAs Personalizadas" in indicadores_seleccionados:
+        for item in lista_emas:
+            p = int(item['periodo'])
+            col = item['color']
+            col_name = f'EMA_{p}'
+            if col_name in df_plot.columns:
+                fig.add_trace(go.Scatter(
+                    x=df_plot['Date'], y=df_plot[col_name],
+                    line=dict(color=col, width=1.3),
+                    name=f'EMA {p}'
+                ), row=1, col=1)
 
     if "Bandas Bollinger" in indicadores_seleccionados:
         fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dot'), name='BB Sup'), row=1, col=1)
@@ -331,7 +344,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
     if "Parabolic SAR" in indicadores_seleccionados:
         fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Parabolic_SAR'], mode='markers', marker=dict(color='#f97316', size=3), name='SAR'), row=1, col=1)
 
-    # 2. PANEL SECUNDARIO / VOLUMEN O PANELES INFERIORES
+    # 2. PANELES INFERIORES
     fila_actual = 2
     if num_subpaneles == 0:
         colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], 'rgba(16, 185, 129, 0.6)', 'rgba(244, 63, 94, 0.6)')
@@ -402,7 +415,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             ultimo = df_con_volumen.iloc[-1]
             fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
 
-        df_calculado = calcular_indicadores(df.copy())
+        df_calculado = calcular_indicadores(df.copy(), st.session_state['lista_emas'])
         ultimo_fila = df_calculado[df_calculado['Date'] == ultimo['Date']]
         ultimo_datos = df_calculado.iloc[-1] if ultimo_fila.empty else ultimo_fila.iloc[-1]
 
@@ -446,7 +459,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         return None
 
 # -------------------------------------------------------------------
-# MODAL AVANZADO CON SELECTOR MULTI-INDICADOR ÉLITE
+# MODAL AVANZADO CON GESTOR DE EMAS PERSONALIZADAS
 # -------------------------------------------------------------------
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
@@ -484,18 +497,40 @@ def mostrar_modal_grafico(datos_empresa):
         temporalidad = st.radio("Temporalidad", ["1 Día", "1 Semana", "1 Mes"], horizontal=True, label_visibility="collapsed")
 
     with col_ind:
-        # SELECTOR DE INDICADORES ÉLITE (CONSERVA TUS ELECCIONES AL CERRAR/ABRIR)
         indicadores_seleccionados = st.multiselect(
             "Seleccionar Indicadores:",
-            ["EMAs (30/60)", "EMA Rápida (9)", "EMA Larga (200)", "Bandas Bollinger", "Supertrend", "VWAP", "Parabolic SAR", "MACD", "RSI (14)"],
+            ["EMAs Personalizadas", "Bandas Bollinger", "Supertrend", "VWAP", "Parabolic SAR", "MACD", "RSI (14)"],
             default=st.session_state['indicadores_activos'],
             placeholder="Añadir indicadores técnicos..."
         )
         st.session_state['indicadores_activos'] = indicadores_seleccionados
 
+    # --- PANEL CONFIGURABLE DE EMAs (ESTILO TRADINGVIEW) ---
+    if "EMAs Personalizadas" in indicadores_seleccionados:
+        with st.expander("⚙️ Configurar EMAs (Períodos y Colores)", expanded=True):
+            nuevas_emas = []
+            cols_emas = st.columns(len(st.session_state['lista_emas']) + 1)
+            
+            for idx, item in enumerate(st.session_state['lista_emas']):
+                with cols_emas[idx]:
+                    p = st.number_input(f"EMA #{idx+1}", min_value=1, max_value=500, value=int(item['periodo']), key=f"ema_p_{idx}")
+                    c = st.color_picker(f"Color #{idx+1}", value=item['color'], key=f"ema_c_{idx}")
+                    nuevas_emas.append({"periodo": p, "color": c})
+            
+            with cols_emas[-1]:
+                st.write("")
+                st.write("")
+                if st.button("➕ Añadir EMA"):
+                    nuevas_emas.append({"periodo": 50, "color": "#22c55e"})
+                    st.session_state['lista_emas'] = nuevas_emas
+                    st.rerun()
+            
+            st.session_state['lista_emas'] = nuevas_emas
+
     df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
-    df_indicadores = calcular_indicadores(df_convertido)
-    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad, indicadores_seleccionados)
+    df_indicadores = calcular_indicadores(df_convertido, st.session_state['lista_emas'])
+    
+    fig = generar_grafico_tecnico(df_indicadores, datos_empresa['nombre'], temporalidad, indicadores_seleccionados, st.session_state['lista_emas'])
     
     st.plotly_chart(
         fig, 
@@ -670,4 +705,4 @@ if st.session_state.get('analizado', False):
             mostrar_modal_grafico(st.session_state['empresa_modal'])
 
 else:
-    st.info("👈 Presiona 'Analizar Mercado' en la barra lateral para desplegar la información.")
+    st.info("👈 ")
