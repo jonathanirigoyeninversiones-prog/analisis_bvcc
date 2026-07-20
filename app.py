@@ -35,17 +35,6 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* FORZAR ANCHO TOTAL ABSOLUTO EN LAS TABLAS DE DATOS */
-    div[data-testid="stDataFrame"] {
-        width: 100% !important;
-    }
-    div[data-testid="stDataFrame"] > div {
-        width: 100% !important;
-    }
-    div[data-testid="stDataFrame"] table {
-        width: 100% !important;
-    }
-
     .header-card {
         background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
         border: 1px solid #374151;
@@ -444,7 +433,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         return {
             'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
             'estado': estado,
-            'puntaje': round(puntaje, 1),
+            'puntaje': f"{round(puntaje, 1)} pts",
             'precio': float(ultimo_datos['Close']),
             'target': float(target),
             'upside': float(upside),
@@ -477,7 +466,7 @@ def mostrar_modal_grafico(datos_empresa):
                 <div class="metric-value">${precio_usd:.4f}</div>
             </div>
             <div>
-                <div class="metric-label">Potencial</div>
+                <div class="metric-label">Upside</div>
                 <div class="metric-value" style="color: #4ade80;">+{datos_empresa['upside']:.1f}%</div>
             </div>
         </div>
@@ -631,13 +620,13 @@ if st.session_state.get('analizado', False):
             st.markdown(f"""
             <div class="kpi-card">
                 <div class="kpi-title">Top Oportunidad #1</div>
-                <div class="kpi-value" style="color: #facc15;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
+                <div class="kpi-value" style="color: #facc15;">{top_accion['nombre']} ({top_accion['puntaje']})</div>
             </div>
             """, unsafe_allow_html=True)
         with col3:
             st.markdown(f"""
             <div class="kpi-card">
-                <div class="kpi-title">Máximo Potencial Estimado</div>
+                <div class="kpi-title">Máximo Upside Estimado</div>
                 <div class="kpi-value" style="color: #38bdf8;">+{top_accion['upside']:.1f}%</div>
             </div>
             """, unsafe_allow_html=True)
@@ -663,14 +652,13 @@ if st.session_state.get('analizado', False):
                 'precio': 'Precio (Bs)',
                 'precio_usd': 'Precio (USD)',
                 'target': 'Target (Bs)',
-                'upside': 'Potencial'
+                'upside': 'Upside'
             })
             
-            columnas = ['Ticker', 'Recomendación', 'Puntaje', 'Precio (Bs)', 'Precio (USD)', 'Target (Bs)', 'Potencial']
+            columnas = ['Ticker', 'Recomendación', 'Puntaje', 'Precio (Bs)', 'Precio (USD)', 'Target (Bs)', 'Upside']
             
             st.subheader(f"📊 {titulo} ({len(df)} empresas)")
             
-            # Se eliminó la limitación fija de columnas para que el componente nativo de Streamlit ajuste dinámicamente el ancho de la tabla a la pantalla completa sin requerir desplazamiento horizontal.
             st.dataframe(
                 df_display[columnas], 
                 use_container_width=True, 
@@ -680,19 +668,13 @@ if st.session_state.get('analizado', False):
                 on_select="rerun",
                 key=clave_tabla,
                 column_config={
-                    "Ticker": st.column_config.TextColumn("Ticker", help="Código de la acción"),
-                    "Recomendación": st.column_config.TextColumn("Recomendación"),
-                    "Puntaje": st.column_config.ProgressColumn(
-                        "Score Cuantitativo",
-                        help="Puntaje asignado por el algoritmo",
-                        format="%f pts",
-                        min_value=0,
-                        max_value=100
-                    ),
+                    "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                    "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
+                    "Puntaje": st.column_config.TextColumn("Puntaje", width="small"),
                     "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
                     "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
                     "Target (Bs)": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs"),
-                    "Potencial": st.column_config.NumberColumn("Potencial (Upside)", format="+%.2f%%")
+                    "Upside": st.column_config.NumberColumn("Upside", format="+%.2f%%")
                 }
             )
             
