@@ -5,7 +5,8 @@ import os
 import requests
 import subprocess
 import sys
-from datetime import datetime, date
+import time
+from datetime import datetime, date, timedelta
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -99,7 +100,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- MEMORIA PARA INDICADORES Y EMAS DINÁMICAS ---
 OPCIONES_INDICADORES = ["EMAs Personalizadas", "Bandas Bollinger", "Supertrend", "VWAP", "Parabolic SAR", "MACD", "RSI (14)"]
 
 if 'indicadores_activos' not in st.session_state:
@@ -107,9 +107,9 @@ if 'indicadores_activos' not in st.session_state:
 
 if 'lista_emas' not in st.session_state:
     st.session_state['lista_emas'] = [
-        {"periodo": 9, "color": "#facc15"},
-        {"periodo": 30, "color": "#38bdf8"},
-        {"periodo": 60, "color": "#fb7185"}
+        {"periodo": 50, "color": "#38bdf8"},
+        {"periodo": 100, "color": "#facc15"},
+        {"periodo": 200, "color": "#a855f7"}
     ]
 
 def fmt_bs(valor):
@@ -166,9 +166,6 @@ def cambiar_temporalidad(df, temporalidad):
     df_resampled.reset_index(inplace=True)
     return df_resampled
 
-# -------------------------------------------------------------------
-# CÁLCULO DE INDICADORES (CON EMAS DINÁMICAS)
-# -------------------------------------------------------------------
 def calcular_indicadores(df, lista_emas):
     df = df.sort_values('Date').reset_index(drop=True)
 
@@ -193,13 +190,15 @@ def calcular_indicadores(df, lista_emas):
     df['BB_lower'] = df['SMA20'] - (2 * df['STD20'])
     df['BB_upper'] = df['SMA20'] + (2 * df['STD20'])
 
+    total_filas = len(df)
     for item in lista_emas:
         p = int(item['periodo'])
         if p > 0:
-            df[f'EMA_{p}'] = df['Close'].ewm(span=p, adjust=False).mean()
+            if total_filas >= p:
+                df[f'EMA_{p}'] = df['Close'].ewm(span=p, adjust=False).mean()
+            else:
+                df[f'EMA_{p}'] = df['Close'].ewm(span=max(2, total_filas // 2), adjust=False).mean()
 
-    df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
-    df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
@@ -279,9 +278,6 @@ def calcular_indicadores(df, lista_emas):
 
     return df
 
-# -------------------------------------------------------------------
-# MOTOR GRÁFICO DINÁMICO
-# -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
     df_plot = df.tail(100).copy()
 
@@ -367,14 +363,8 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
     fig.update_xaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor='#1e293b', gridwidth=0.5, zeroline=False)
     
-    for annotation in fig['layout']['annotations']:
-        annotation['font'] = dict(size=11, color='#64748b', family='Segoe UI')
-    
     return fig
 
-# -------------------------------------------------------------------
-# PROCESAMIENTO CSV
-# -------------------------------------------------------------------
 def analizar_archivo(ruta_archivo, fecha_referencia):
     try:
         df = pd.read_csv(ruta_archivo, decimal=',', thousands='.')
@@ -400,41 +390,49 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         
         if df_con_volumen.empty:
             ultimo = df.iloc[-1]
-            fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
         else:
             ultimo = df_con_volumen.iloc[-1]
-            fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
 
         df_calculado = calcular_indicadores(df.copy(), st.session_state['lista_emas'])
         ultimo_fila = df_calculado[df_calculado['Date'] == ultimo['Date']]
         ultimo_datos = df_calculado.iloc[-1] if ultimo_fila.empty else ultimo_fila.iloc[-1]
 
         puntaje = 0
-        if ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
-            puntaje += 25
-        if not pd.isna(ultimo_datos['EMA60']) and ultimo_datos['EMA60'] > 0:
-            distancia_ema = ((ultimo_datos['EMA60'] - ultimo_datos['Close']) / ultimo_datos['EMA60']) * 100
-            if distancia_ema > 0:
-                puntaje += min(distancia_ema * 1.6, 40)
-        if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] < ultimo_datos['BB_lower']:
-            puntaje += 15
+        
+        # 1. EVALUACIÓN DE ZONA BAJA / ACUMULACIÓN (Tu teoría: buscar valor castigado cerca de soporte)
+        if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] <= (ultimo_datos['BB_lower'] * 1.05):
+            puntaje += 35  # Premio fuerte por estar tocando o cerca de la banda inferior (suelo)
 
+        # 2. GATILLO DE RSI Y SOBREVENTA (Cerca del nivel 30)
         rsi_hoy = ultimo_datos['RSI']
         rsi_ayer = ultimo_datos['RSI_Anterior']
         if not pd.isna(rsi_hoy):
-            puntaje += max(0, 10 - abs(rsi_hoy - 30))
-        if not pd.isna(rsi_hoy) and not pd.isna(rsi_ayer) and rsi_hoy > rsi_ayer and rsi_hoy < 40:
-            puntaje += 10
+            # Premiar estar cerca de 30 o rebotando desde abajo
+            distancia_30 = abs(rsi_hoy - 30)
+            if distancia_30 <= 10:
+                puntaje += 25
+            if not pd.isna(rsi_ayer) and rsi_hoy > rsi_ayer:
+                puntaje += 15  # El RSI viene girando hacia arriba
+
+        # 3. GATILLO DE VOLUMEN INSTITUCIONAL (La teoría de tu mentor: vela con volumen verde)
+        vol_actual = ultimo_datos['Volume']
+        vol_ma = ultimo_datos['Vol_MA20']
+        es_vela_verde = ultimo_datos['Close'] >= ultimo_datos['Open']
+        
+        if not pd.isna(vol_ma) and vol_ma > 0 and es_vela_verde:
+            if vol_actual >= (vol_ma * 1.5):
+                puntaje += 25  # Volumen superior al 50% de la media con vela verde
 
         if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
             target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
             upside = ((target - ultimo_datos['Close']) / ultimo_datos['Close']) * 100
-            puntaje += 10 if upside > 20 else (5 if upside > 10 else 0)
         else:
             target, upside = 0, 0
 
         puntaje = min(puntaje, 100)
-        estado = 'COMPRA' if (puntaje >= 60 and ultimo_datos['EMA30'] < ultimo_datos['EMA60']) else ('SEGUIMIENTO' if puntaje >= 35 else 'ESPERAR')
+        
+        # Condición estricta de COMPRA: Puntuación alta + Vela verde con volumen de giro o soporte
+        estado = 'COMPRA' if puntaje >= 65 else ('SEGUIMIENTO' if puntaje >= 40 else 'ESPERAR')
 
         return {
             'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
@@ -448,9 +446,6 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
     except Exception:
         return None
 
-# -------------------------------------------------------------------
-# MODAL AVANZADO CON GESTOR DE EMAS PERSONALIZADAS SEGURO
-# -------------------------------------------------------------------
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
 
@@ -487,7 +482,6 @@ def mostrar_modal_grafico(datos_empresa):
         temporalidad = st.radio("Temporalidad", ["1 Día", "1 Semana", "1 Mes"], horizontal=True, label_visibility="collapsed")
 
     with col_ind:
-        # Filtrar valores activos para que coincidan estrictamente con las opciones permitidas
         st.session_state['indicadores_activos'] = [
             ind for ind in st.session_state['indicadores_activos'] if ind in OPCIONES_INDICADORES
         ]
@@ -538,11 +532,24 @@ def mostrar_modal_grafico(datos_empresa):
 st.sidebar.subheader("📥 Análisis de Mercado")
 fecha_referencia = st.sidebar.date_input("📅 Fecha de referencia", value=date.today())
 
+if 'ultima_actualizacion' not in st.session_state:
+    st.session_state['ultima_actualizacion'] = datetime.now() - timedelta(hours=2)
+
+tiempo_transcurrido = datetime.now() - st.session_state['ultima_actualizacion']
+if tiempo_transcurrido.total_seconds() >= 3600:
+    with st.spinner("Actualización automática por tiempo (1 hora)..."):
+        try:
+            subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
+            st.session_state['ultima_actualizacion'] = datetime.now()
+        except Exception:
+            pass
+
 st.sidebar.divider()
 if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
     with st.spinner("Analizando..."):
         try:
             subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
+            st.session_state['ultima_actualizacion'] = datetime.now()
             st.sidebar.success("🎉 ¡Historial actualizado!")
             st.rerun()
         except Exception as e:
