@@ -601,11 +601,16 @@ fecha_referencia = st.sidebar.date_input(
 
 carpeta = "./datos_bvc"
 
-# --- Cabecera con Título a la izquierda y Dólar a la derecha ---
+# --- Cabecera con Título a la izquierda, Descargo y Dólar a la derecha ---
 col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
-    st.title("📊 Terminal Analítico BVC")
+    st.title("📊 Análisis BVC")
+    st.markdown("""
+    <p style="font-size: 0.8rem; color: #94a3b8; line-height: 1.4; margin-top: -10px; margin-bottom: 15px;">
+        <strong>Descargo de responsabilidad:</strong> En ningún momento se promueve o se indica la compra de ninguna acción. La misma es sólo responsabilidad personal.
+    </p>
+    """, unsafe_allow_html=True)
 
 with col_dolar:
     with st.spinner("Cargando dólar..."):
@@ -687,7 +692,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
             st.divider()
 
             df_menos_1 = df_activos[df_activos['precio_usd'] < 1].copy()
-            df_mas_1 = df_activos[df_activos['puntaje'] >= 0].copy() # Nota: mantiene la separación original por precio o se ajusta
+            df_mas_1 = df_activos[df_activos['precio_usd'] >= 1].copy()
 
             def mostrar_tabla_interactiva(df, titulo, clave_tabla):
                 if df.empty:
@@ -728,9 +733,9 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                         if datos_empresa:
                             st.session_state['empresa_modal'] = datos_empresa
 
-            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] < 1], "Acciones Menores a 1 USD", "tabla_menos_1")
+            mostrar_tabla_interactiva(df_menos_1, "Acciones Menores a 1 USD", "tabla_menos_1")
             st.markdown("<br>", unsafe_allow_html=True)
-            mostrar_tabla_interactiva(df_activos[df_activos['precio_usd'] >= 1], "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
+            mostrar_tabla_interactiva(df_mas_1, "Acciones Mayores o Iguales a 1 USD", "tabla_mas_1")
 
             if st.session_state['empresa_modal'] is not None:
                 mostrar_modal_grafico(st.session_state['empresa_modal'])
