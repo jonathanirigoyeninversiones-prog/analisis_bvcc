@@ -433,7 +433,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia, lista_emas_tuple):
         return {
             'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
             'estado': estado,
-            'puntaje': f"{round(puntaje, 1)} pts",
+            'puntaje': round(puntaje, 1),
             'precio': float(ultimo_datos['Close']),
             'target': float(target),
             'upside': float(upside),
@@ -620,7 +620,7 @@ if st.session_state.get('analizado', False):
             st.markdown(f"""
             <div class="kpi-card">
                 <div class="kpi-title">Top Oportunidad #1</div>
-                <div class="kpi-value" style="color: #facc15;">{top_accion['nombre']} ({top_accion['puntaje']})</div>
+                <div class="kpi-value" style="color: #facc15;">{top_accion['nombre']} ({top_accion['puntaje']} pts)</div>
             </div>
             """, unsafe_allow_html=True)
         with col3:
@@ -670,7 +670,13 @@ if st.session_state.get('analizado', False):
                 column_config={
                     "Ticker": st.column_config.TextColumn("Ticker", width="small"),
                     "Recomendación": st.column_config.TextColumn("Recomendación", width="medium"),
-                    "Puntaje": st.column_config.TextColumn("Puntaje", width="small"),
+                    "Puntaje": st.column_config.ProgressColumn(
+                        "Puntaje",
+                        format="%f pts",
+                        min_value=0,
+                        max_value=100,
+                        width="small"
+                    ),
                     "Precio (Bs)": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs"),
                     "Precio (USD)": st.column_config.NumberColumn("Precio (USD)", format="$%.4f"),
                     "Target (Bs)": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs"),
