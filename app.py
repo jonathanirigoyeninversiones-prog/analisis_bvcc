@@ -104,7 +104,41 @@ st.markdown("""
 """)
 
 # -------------------------------------------------------------------
-# 1. CÁLCULO DE INDICADORES
+# 1. FUNCIÓN DE AGRUPACIÓN POR TEMPORALIDAD (RESAMPLING)
+# -------------------------------------------------------------------
+def cambiar_temporalidad(df, temporalidad):
+    df = df.copy()
+    df['Date'] = pd.to_datetime(df['Date'])
+    df.set_index('Date', inplace=True)
+    
+    if temporalidad == "1 Semana":
+        # Agrupa por semanas (W). Open toma el primero, Close el último, High el máximo, Low el mínimo.
+        df_resampled = df.resample('W').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }).dropna()
+    elif temporalidad == "1 Mes":
+        # Agrupa por meses (ME)
+        df_resampled = df.resample('ME').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }).dropna()
+    else:
+        # Si es 1 Día, se queda exactamente igual
+        df_resampled = df.reset_index()
+        return df_resampled
+        
+    df_resampled.reset_index(inplace=True)
+    return df_resampled
+
+# -------------------------------------------------------------------
+# 2. CÁLCULO DE INDICADORES
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -143,14 +177,15 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 2. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA
+# 3. FUNCIÓN PARA DIBUJAR LA GRÁFICA TÉCNICA
 # -------------------------------------------------------------------
-def generar_grafico_tecnico(df, nombre_empresa):
-    df_plot = df.tail(120).copy() # Mostrar los últimos 120 días operados
+def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
+    # Mostramos los últimos 120 registros de la temporalidad seleccionada
+    df_plot = df.tail(120).copy() 
 
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
                         vertical_spacing=0.08, 
-                        subplot_titles=(f'Evolución de Precio - {nombre_empresa}', 'Indicador RSI (14)'),
+                        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Indicador RSI (14)'),
                         row_width=[0.3, 0.7])
 
     # Velas de Precio
@@ -178,7 +213,7 @@ def generar_grafico_tecnico(df, nombre_empresa):
     return fig
 
 # -------------------------------------------------------------------
-# 3. ANALIZAR ARCHIVO
+# 4. ANALIZAR ARCHIVO
 # -------------------------------------------------------------------
 def analizar_archivo(ruta_archivo, fecha_referencia):
     try:
@@ -212,30 +247,31 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             ultimo = df_con_volumen.iloc[-1]
             fecha_ultimo_operado = ultimo['Date'].strftime('%Y-%m-%d')
 
-        df = calcular_indicadores(df)
+        # El análisis base de las tablas se queda con los datos diarios originales
+        df_calculado = calcular_indicadores(df.copy())
 
-        ultimo_fila = df[df['Date'] == ultimo['Date']]
+        ultimo_fila = df_calculado[df_calculado['Date'] == ultimo['Date']]
         if ultimo_fila.empty:
-            ultimo = df.iloc[-1]
+            ultimo_datos = df_calculado.iloc[-1]
         else:
-            ultimo = ultimo_fila.iloc[-1]
+            ultimo_datos = ultimo_fila.iloc[-1]
 
         puntaje = 0
 
-        if ultimo['EMA30'] < ultimo['EMA60']:
+        if ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
             puntaje += 25
 
-        if not pd.isna(ultimo['EMA60']) and ultimo['EMA60'] > 0:
-            distancia_ema = ((ultimo['EMA60'] - ultimo['Close']) / ultimo['EMA60']) * 100
+        if not pd.isna(ultimo_datos['EMA60']) and ultimo_datos['EMA60'] > 0:
+            distancia_ema = ((ultimo_datos['EMA60'] - ultimo_datos['Close']) / ultimo_datos['EMA60']) * 100
             if distancia_ema > 0:
                 pts_ema = min(distancia_ema * 1.6, 40)
                 puntaje += pts_ema
 
-        if not pd.isna(ultimo['BB_lower']) and ultimo['Close'] < ultimo['BB_lower']:
+        if not pd.isna(ultimo_datos['BB_lower']) and ultimo_datos['Close'] < ultimo_datos['BB_lower']:
             puntaje += 15
 
-        rsi_hoy = ultimo['RSI']
-        rsi_ayer = ultimo['RSI_Anterior']
+        rsi_hoy = ultimo_datos['RSI']
+        rsi_ayer = ultimo_datos['RSI_Anterior']
         if not pd.isna(rsi_hoy):
             distancia_al_30 = abs(rsi_hoy - 30)
             pts_nivel = max(0, 10 - distancia_al_30)
@@ -245,9 +281,9 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             if rsi_hoy > rsi_ayer and rsi_hoy < 40:
                 puntaje += 10
 
-        if not pd.isna(ultimo['ATR14']) and ultimo['ATR14'] > 0:
-            target = ultimo['Close'] + (1.5 * ultimo['ATR14'])
-            upside = ((target - ultimo['Close']) / ultimo['Close']) * 100
+        if not pd.isna(ultimo_datos['ATR14']) and ultimo_datos['ATR14'] > 0:
+            target = ultimo_datos['Close'] + (1.5 * ultimo_datos['ATR14'])
+            upside = ((target - ultimo_datos['Close']) / ultimo_datos['Close']) * 100
             if upside > 20:
                 puntaje += 10
             elif upside > 10:
@@ -256,12 +292,12 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             target = 0
             upside = 0
 
-        if 'EMA100' in ultimo and not pd.isna(ultimo['EMA100']) and ultimo['Close'] < ultimo['EMA100']:
+        if 'EMA100' in ultimo_datos and not pd.isna(ultimo_datos['EMA100']) and ultimo_datos['Close'] < ultimo_datos['EMA100']:
             puntaje += 5
 
         puntaje = min(puntaje, 100)
 
-        if puntaje >= 60 and ultimo['EMA30'] < ultimo['EMA60']:
+        if puntaje >= 60 and ultimo_datos['EMA30'] < ultimo_datos['EMA60']:
             estado = '✅ COMPRA'
         elif puntaje >= 35:
             estado = '🔍 SEGUIMIENTO'
@@ -272,22 +308,22 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             'nombre': os.path.basename(ruta_archivo).replace('.csv', ''),
             'estado': estado,
             'puntaje': round(puntaje, 1),
-            'precio': float(ultimo['Close']),
+            'precio': float(ultimo_datos['Close']),
             'target': float(target),
             'upside': float(upside),
             'rsi': round(rsi_hoy, 2) if not pd.isna(rsi_hoy) else 0,
             'rsi_ayer': round(rsi_ayer, 2) if not pd.isna(rsi_ayer) else 0,
-            'ema30': float(ultimo['EMA30']) if not pd.isna(ultimo['EMA30']) else 0,
-            'ema60': float(ultimo['EMA60']) if not pd.isna(ultimo['EMA60']) else 0,
+            'ema30': float(ultimo_datos['EMA30']) if not pd.isna(ultimo_datos['EMA30']) else 0,
+            'ema60': float(ultimo_datos['EMA60']) if not pd.isna(ultimo_datos['EMA60']) else 0,
             'fecha_ultimo': fecha_ultimo_operado,
-            'df_completo': df # Guardamos los datos para graficar
+            'df_original': df # Conservamos el df limpio para aplicar temporalidades dinámicas
         }
 
     except Exception as e:
         return None
 
 # -------------------------------------------------------------------
-# 4. INTERFAZ DE USUARIO
+# 5. INTERFAZ DE USUARIO
 # -------------------------------------------------------------------
 st.sidebar.header("⚙️ Configuración")
 
@@ -356,18 +392,32 @@ if st.session_state.get('analizado', False):
         mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
         mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-        # --- SECCIÓN DE GRÁFICO INTERACTIVO ---
+        # --- SECCIÓN DE GRÁFICO INTERACTIVO CON SELECTOR DE TEMPORALIDADES ---
         st.divider()
-        st.subheader("📈 Analizador Gráfico de Acción")
+        st.subheader("📈 Analizador Gráfico de Acción Multi-Temporalidad")
         
-        lista_empresas = sorted([r['nombre'] for r in resultados])
-        empresa_seleccionada = st.selectbox("Selecciona una empresa para ver su gráfico técnico detallado:", lista_empresas)
+        col_selec, col_temp = st.columns([2, 1])
+        
+        with col_selec:
+            lista_empresas = sorted([r['nombre'] for r in resultados])
+            empresa_seleccionada = st.selectbox("Selecciona una empresa para analizar:", lista_empresas)
+            
+        with col_temp:
+            # Selector de temporalidades tipo TradingView
+            temporalidad = st.radio("Temporalidad del gráfico:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
 
-        # Buscar los datos de la empresa seleccionada
+        # Buscar los datos originales de la empresa seleccionada
         datos_empresa = next((item for item in resultados if item["nombre"] == empresa_seleccionada), None)
 
         if datos_empresa:
-            fig = generar_grafico_tecnico(datos_empresa['df_completo'], empresa_seleccionada)
+            # 1. Transformamos los datos a la temporalidad elegida (Día, Semana o Mes)
+            df_convertido = cambiar_temporalidad(datos_empresa['df_original'], temporalidad)
+            
+            # 2. Recalculamos los indicadores (EMAs, Bollinger, RSI) basándonos en la nueva estructura temporal
+            df_indicadores = calcular_indicadores(df_convertido)
+            
+            # 3. Dibujamos la gráfica limpia
+            fig = generar_grafico_tecnico(df_indicadores, empresa_seleccionada, temporalidad)
             st.plotly_chart(fig, use_container_width=True)
 
 else:
