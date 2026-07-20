@@ -8,7 +8,7 @@ from datetime import datetime, date
 # -------------------------------------------------------------------
 # CONFIGURACIÓN DE LA PÁGINA
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Análisis BVC - Terminal Cuantitativo", layout="wide")
+st.set_page_config(page_title="Análisis BVC", layout="wide")
 
 # ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (FANCY UI / UX REDISEÑADO)
 st.markdown("""
