@@ -349,10 +349,10 @@ def calcular_indicadores(df, lista_emas):
     return df
 
 # -------------------------------------------------------------------
-# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY)
+# GRÁFICO TÉCNICO INTERACTIVO (PLOTLY) - TODAS LAS VELAS (df.copy())
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_seleccionados, lista_emas):
-    df_plot = df.tail(100).copy()
+    df_plot = df.copy()
 
     subpaneles = [ind for ind in indicadores_seleccionados if ind in ["MACD", "RSI (14)"]]
     num_subpaneles = len(subpaneles)
@@ -749,7 +749,6 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 df_display = df.copy()
                 df_display = df_display.rename(columns={'estado': 'Recomendado', 'nombre': 'Ticker'})
                 
-                # Columnas ajustadas y optimizadas de tamaño para que encajen perfectamente a lo ancho sin scroll horizontal
                 columnas_mostrar = ['Ticker', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
                 
                 st.markdown(f"""
