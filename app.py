@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import requests
+import subprocess
+import sys
 from datetime import datetime, date
 
 # -------------------------------------------------------------------
@@ -108,7 +110,6 @@ st.markdown("""
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
 
-    # --- RSI 14 (Método Wilder - IDÉNTICO A TRADINGVIEW) ---
     delta = df['Close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -124,18 +125,15 @@ def calcular_indicadores(df):
     df['RSI'] = 100 - (100 / (1 + rs))
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
-    # Bandas de Bollinger (20,2)
     df['SMA20'] = df['Close'].rolling(20).mean()
     df['STD20'] = df['Close'].rolling(20).std()
     df['BB_lower'] = df['SMA20'] - (2 * df['STD20'])
     df['BB_upper'] = df['SMA20'] + (2 * df['STD20'])
 
-    # EMA 30, 60 y 100
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean()
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean()
     df['EMA100'] = df['Close'].ewm(span=100, adjust=False).mean()
 
-    # ATR (14)
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -200,27 +198,20 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
         else:
             ultimo = ultimo_fila.iloc[-1]
 
-        # ---------------------------------------------------------------
-        # PUNTAJE: SIN VOLUMEN (Máximo 100 puntos)
-        # ---------------------------------------------------------------
         puntaje = 0
 
-        # 1. TENDENCIA (EMA 30 vs 60)
         if ultimo['EMA30'] < ultimo['EMA60']:
             puntaje += 25
 
-        # 2. DISTANCIA A EMA 60
         if not pd.isna(ultimo['EMA60']) and ultimo['EMA60'] > 0:
             distancia_ema = ((ultimo['EMA60'] - ultimo['Close']) / ultimo['EMA60']) * 100
             if distancia_ema > 0:
                 pts_ema = min(distancia_ema * 1.6, 40)
                 puntaje += pts_ema
 
-        # 3. BOLLINGER
         if not pd.isna(ultimo['BB_lower']) and ultimo['Close'] < ultimo['BB_lower']:
             puntaje += 15
 
-        # 4. RSI - NIVEL
         rsi_hoy = ultimo['RSI']
         rsi_ayer = ultimo['RSI_Anterior']
         if not pd.isna(rsi_hoy):
@@ -228,12 +219,10 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             pts_nivel = max(0, 10 - distancia_al_30)
             puntaje += pts_nivel
 
-        # 5. RSI - PENDIENTE
         if not pd.isna(rsi_hoy) and not pd.isna(rsi_ayer):
             if rsi_hoy > rsi_ayer and rsi_hoy < 40:
                 puntaje += 10
 
-        # 6. POTENCIAL ATR
         if not pd.isna(ultimo['ATR14']) and ultimo['ATR14'] > 0:
             target = ultimo['Close'] + (1.5 * ultimo['ATR14'])
             upside = ((target - ultimo['Close']) / ultimo['Close']) * 100
@@ -245,13 +234,11 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
             target = 0
             upside = 0
 
-        # 7. BONUS EMA100
         if 'EMA100' in ultimo and not pd.isna(ultimo['EMA100']) and ultimo['Close'] < ultimo['EMA100']:
             puntaje += 5
 
         puntaje = min(puntaje, 100)
 
-        # CLASIFICACIÓN
         if puntaje >= 60 and ultimo['EMA30'] < ultimo['EMA60']:
             estado = '✅ COMPRA'
         elif puntaje >= 35:
@@ -304,13 +291,27 @@ fecha_referencia = st.sidebar.date_input(
     help="La app buscará el último dato disponible en o antes de esta fecha."
 )
 
+# --- NUEVO BOTÓN: ACTUALIZAR DESDE LA INTERFAZ ---
+st.sidebar.divider()
+st.sidebar.subheader("📥 Datos en la Nube")
+if st.sidebar.button("🔄 Actualizar Historial BVC", help="Descarga los datos más recientes desde internet"):
+    with st.spinner("Descargando precios históricos de la BVC... Esto puede tomar un minuto."):
+        try:
+            # Ejecuta el descargador en cascada directamente en el servidor
+            resultado = subprocess.run([sys.executable, "descargador_cascada.py"], capture_output=True, text=True)
+            st.sidebar.success("🎉 ¡Historial descargado con éxito!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Error al descargar: {e}")
+st.sidebar.divider()
+
 if st.sidebar.button("🔍 Analizar Carpeta"):
     if not os.path.exists(carpeta):
-        st.error("⚠️ La ruta no existe. Verifica la carpeta.")
+        st.error("⚠️ La ruta no existe. Primero presiona el botón 'Actualizar Historial BVC' de arriba para descargar los datos.")
     else:
         archivos = [f for f in os.listdir(carpeta) if f.endswith('.csv')]
         if not archivos:
-            st.warning("No se encontraron archivos .csv en esa carpeta.")
+            st.warning("La carpeta está vacía. Presiona el botón 'Actualizar Historial BVC' para descargar las acciones.")
         else:
             resultados = []
             with st.spinner(f"Analizando {len(archivos)} archivos hasta {fecha_referencia.strftime('%Y-%m-%d')}..."):
@@ -328,27 +329,21 @@ if st.sidebar.button("🔍 Analizar Carpeta"):
                 df_activos = df_resultados[~df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
                 df_activos = df_activos.sort_values('puntaje', ascending=False)
 
-                # --- Obtener el dólar para la conversión ---
                 dolar, _ = get_dolar_con_cache()
 
                 if dolar == 0:
                     st.warning("⚠️ No se pudo obtener el dólar oficial. No se pueden crear las tablas por precio en USD.")
                 else:
-                    # Calcular precio en dólares
                     df_activos['precio_usd'] = df_activos['precio'] / dolar
 
-                    # --- Tabla 1: Menos de 1 USD ---
                     df_menos_1 = df_activos[df_activos['precio_usd'] < 1].copy()
-                    # --- Tabla 2: Mayor o igual a 1 USD ---
                     df_mas_1 = df_activos[df_activos['precio_usd'] >= 1].copy()
 
-                    # --- Función para mostrar una tabla (sin buscador) ---
                     def mostrar_tabla(df, titulo):
                         if df.empty:
                             st.info(f"📭 No hay acciones en '{titulo}'")
                             return
                         
-                        # Preparar para mostrar
                         df_display = df.copy()
                         df_display = df_display.rename(columns={'estado': 'Recomendado'})
                         for col in ['precio', 'target', 'ema30', 'ema60']:
@@ -381,12 +376,10 @@ if st.sidebar.button("🔍 Analizar Carpeta"):
                             }
                         )
 
-                    # Mostrar las dos tablas
                     st.subheader(f"📈 Top Oportunidades - Referencia: {fecha_referencia.strftime('%Y-%m-%d')}")
                     mostrar_tabla(df_menos_1, "🔽 Menos de 1 USD")
                     mostrar_tabla(df_mas_1, "🔼 Mayor o igual a 1 USD")
 
-                # Mostrar los descartados en un expander (con columna "Recomendado")
                 with st.expander("ℹ️ Ver archivos sin datos o con error"):
                     df_error = df_resultados[df_resultados['estado'].isin(['❌ Sin Datos', '⚠️ ERROR'])].copy()
                     df_error = df_error.rename(columns={'estado': 'Recomendado'})
