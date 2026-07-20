@@ -93,7 +93,7 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# 2. CÁLCULO DE INDICADORES SOBRE LOS CSV
+# 2. CÁLCULO DE INDICADORES SOBRE LOS CSV (INCLUYE MACD)
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -112,7 +112,7 @@ def calcular_indicadores(df):
     rs = avg_gain / avg_loss
     rsi_raw = 100 - (100 / (1 + rs))
     
-    # --- SUAVIZADO DEL RSI PARA CURVAS FLUIDAS ---
+    # Suavizado del RSI
     df['RSI'] = rsi_raw.ewm(span=3, adjust=False).mean()
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
@@ -127,6 +127,13 @@ def calcular_indicadores(df):
 
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
+    # --- CÁLCULO DEL MACD (12, 26, 9) ---
+    ema12 = df['Close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = ema12 - ema26
+    df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
+
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -137,17 +144,18 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. GENERAR GRÁFICA INTERACTIVA
+# 3. GENERAR GRÁFICA INTERACTIVA DE 4 NIVELES
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(120).copy()
 
+    # 4 Pisos: Precio (50%), Volumen (15%), RSI (17.5%), MACD (17.5%)
     fig = make_subplots(
-        rows=3, cols=1, 
+        rows=4, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.03, 
-        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Volumen (Área Gris + MA 20)', 'RSI (14) - Suavizado'),
-        row_width=[0.22, 0.18, 0.60]
+        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Volumen', 'RSI (14)', 'MACD (12, 26, 9)'),
+        row_width=[0.175, 0.175, 0.15, 0.50]
     )
 
     # 1. Velas Japonesas
@@ -193,8 +201,25 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     fig.add_hline(y=70, line_dash="dash", row=3, col=1, line_color="#ef4444", line_width=1)
     fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
 
+    # 4. MACD DEBAJO DEL RSI
+    colores_hist = np.where(df_plot['MACD_Hist'] >= 0, '#22c55e', '#ef4444')
+    fig.add_trace(go.Bar(
+        x=df_plot['Date'], y=df_plot['MACD_Hist'],
+        marker_color=colores_hist, name='Histograma MACD', opacity=0.6
+    ), row=4, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['MACD'],
+        line=dict(color='#38bdf8', width=1.5), name='MACD'
+    ), row=4, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=df_plot['Date'], y=df_plot['MACD_Signal'],
+        line=dict(color='#f97316', width=1.5), name='Señal'
+    ), row=4, col=1)
+
     fig.update_layout(
-        height=750, 
+        height=820, 
         template='plotly_dark', 
         xaxis_rangeslider_visible=False,
         margin=dict(l=20, r=20, t=40, b=20),
@@ -205,8 +230,9 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     )
     
     fig.update_yaxes(title_text="Precio (Bs)", row=1, col=1)
-    fig.update_yaxes(title_text="Nominal", row=2, col=1)
-    fig.update_yaxes(title_text="Nivel", range=[10, 90], row=3, col=1)
+    fig.update_yaxes(title_text="Volumen", row=2, col=1)
+    fig.update_yaxes(title_text="RSI", range=[10, 90], row=3, col=1)
+    fig.update_yaxes(title_text="MACD", row=4, col=1)
     
     return fig
 
@@ -325,7 +351,7 @@ def analizar_archivo(ruta_archivo, fecha_referencia):
 if 'empresa_modal' not in st.session_state:
     st.session_state['empresa_modal'] = None
 
-@st.dialog("📊 Gráfico Técnico Avanzado (CSV BVC)", width="large")
+@st.dialog("📊 Gráfico Técnico Avanzado", width="large")
 def mostrar_modal_grafico(datos_empresa):
     temporalidad = st.radio("Temporalidad:", ["1 Día", "1 Semana", "1 Mes"], horizontal=True)
 
@@ -441,7 +467,6 @@ if st.session_state.get('analizado', False):
             st.subheader(f"📊 {titulo} ({len(df)} acciones)")
             st.caption("💡 Haz clic sobre cualquier fila para abrir la gráfica técnica de la empresa.")
             
-            # TABLA INTERACTIVA CON SELECCIÓN
             evento = st.dataframe(
                 df_display[columnas], 
                 use_container_width=True, 
@@ -451,7 +476,6 @@ if st.session_state.get('analizado', False):
                 key=clave_tabla
             )
             
-            # SI EL USUARIO HACE CLIC EN UNA FILA, ABRIR MODAL
             filas_seleccionadas = evento.selection.get("rows", [])
             if filas_seleccionadas:
                 indice_fila = filas_seleccionadas[0]
@@ -462,11 +486,9 @@ if st.session_state.get('analizado', False):
 
         st.subheader(f"📈 Top Oportunidades - Referencia: {fecha_referencia.strftime('%Y-%m-%d')}")
         
-        # TABLAS INTERACTIVAS CON DICCIONARIO INDEPENDIENTE
         mostrar_tabla_interactiva(df_menos_1, "🔽 Menos de 1 USD", "tabla_menos_1")
         mostrar_tabla_interactiva(df_mas_1, "🔼 Mayor o igual a 1 USD", "tabla_mas_1")
 
-        # EJECUCIÓN DEL MODAL FLOTANTE
         if st.session_state['empresa_modal'] is not None:
             mostrar_modal_grafico(st.session_state['empresa_modal'])
 
