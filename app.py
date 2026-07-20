@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Terminal Analítico BVC - Premium", layout="wide")
 
-# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (DARK ULTIMATE & TABLAS EXPANDIDAS)
+# ESTILOS CSS PERSONALIZADOS DE ALTA GAMA (ANCHO TOTAL Y SCROLL HORIZONTAL FLUIDO)
 st.markdown("""
 <style>
     .stApp {
@@ -26,7 +26,6 @@ st.markdown("""
         padding-top: 1rem;
     }
 
-    /* Corrección para que el popover del calendario se vea completo */
     div[data-baseweb="popover"] {
         z-index: 999999 !important;
     }
@@ -45,12 +44,14 @@ st.markdown("""
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
     }
 
-    /* Forzar que las tablas ocupen todo el ancho horizontal disponible */
-    div[data-testid="stDataFrame"] {
+    /* Forzar ancho completo de la tabla eliminando restricciones fijas de Streamlit */
+    .stDataFrame {
         width: 100% !important;
     }
+    
     div[data-testid="stDataFrame"] > div {
         width: 100% !important;
+        overflow-x: auto !important;
     }
 
     .header-card {
@@ -197,7 +198,6 @@ def cambiar_temporalidad(df, temporalidad):
 def calcular_indicadores(df, lista_emas):
     df = df.sort_values('Date').reset_index(drop=True)
 
-    # RSI 14 (Método Wilder)
     delta = df['Close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -213,13 +213,11 @@ def calcular_indicadores(df, lista_emas):
     df['RSI'] = 100 - (100 / (1 + rs))
     df['RSI_Anterior'] = df['RSI'].shift(1)
 
-    # Bandas de Bollinger (20,2)
     df['SMA20'] = df['Close'].rolling(20).mean()
     df['STD20'] = df['Close'].rolling(20).std()
     df['BB_lower'] = df['SMA20'] - (2 * df['STD20'])
     df['BB_upper'] = df['SMA20'] + (2 * df['STD20'])
 
-    # EMAs configuradas dinámicamente
     total_filas = len(df)
     for item in lista_emas:
         p = int(item['periodo'])
@@ -229,11 +227,9 @@ def calcular_indicadores(df, lista_emas):
             else:
                 df[f'EMA_{p}'] = df['Close'].ewm(span=max(2, total_filas // 2), adjust=False).mean()
 
-    # EMAs específicas para la estrategia base
     df['EMA30'] = df['Close'].ewm(span=30, adjust=False).mean() if 'EMA_30' not in df.columns else df.get('EMA_30', df['Close'].ewm(span=30, adjust=False).mean())
     df['EMA60'] = df['Close'].ewm(span=60, adjust=False).mean() if 'EMA_60' not in df.columns else df.get('EMA_60', df['Close'].ewm(span=60, adjust=False).mean())
 
-    # ATR (14)
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -241,18 +237,15 @@ def calcular_indicadores(df, lista_emas):
     true_range = np.max(ranges, axis=1)
     df['ATR14'] = true_range.rolling(14).mean()
 
-    # MACD
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
     ema26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
     df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     df['MACD_Hist'] = df['MACD'] - df['MACD_Signal']
 
-    # VWAP
     tp = (df['High'] + df['Low'] + df['Close']) / 3
     df['VWAP'] = (tp * df['Volume']).cumsum() / df['Volume'].cumsum() if 'Volume' in df.columns else tp
 
-    # Supertrend
     multiplier = 3
     period = 10
     hl2 = (df['High'] + df['Low']) / 2
@@ -276,7 +269,6 @@ def calcular_indicadores(df, lista_emas):
         supertrend[i] = df['Basic_Lower'].iloc[i] if direction[i] == 1 else df['Basic_Upper'].iloc[i]
     df['Supertrend'] = supertrend
 
-    # Parabolic SAR
     psar = df['Close'].copy()
     af = 0.02
     max_af = 0.2
@@ -628,7 +620,6 @@ col_titulo, col_dolar = st.columns([2, 1])
 
 with col_titulo:
     st.title("📊 Terminal Analítico BVC")
-    st.markdown("**Estrategia técnica** - Basada en Precio, EMA, RSI y ATR.")
 
 with col_dolar:
     with st.spinner("Cargando dólar..."):
@@ -719,6 +710,7 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                 df_display = df.copy()
                 df_display = df_display.rename(columns={'estado': 'Recomendado'})
                 
+                # Columnas limpias y ordenadas que entran perfectamente en pantalla
                 columnas_mostrar = ['nombre', 'fecha_ultimo', 'Recomendado', 'puntaje', 'precio', 'precio_usd', 'target', 'upside']
                 
                 st.subheader(f"📊 {titulo} ({len(df)} empresas)")
@@ -732,14 +724,14 @@ if 'resultados' in st.session_state and st.session_state['resultados']:
                     on_select="rerun",
                     key=clave_tabla,
                     column_config={
-                        "nombre": st.column_config.TextColumn("Ticker", width="medium"),
+                        "nombre": st.column_config.TextColumn("Ticker", width="small"),
                         "fecha_ultimo": st.column_config.TextColumn("Último Día", width="medium"),
                         "Recomendado": st.column_config.TextColumn("Recomendación", width="medium"),
-                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="large"),
-                        "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="medium"),
-                        "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="medium"),
-                        "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="medium"),
-                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="medium")
+                        "puntaje": st.column_config.ProgressColumn("Puntaje", format="%f pts", min_value=0, max_value=100, width="medium"),
+                        "precio": st.column_config.NumberColumn("Precio (Bs)", format="%.2f Bs", width="small"),
+                        "precio_usd": st.column_config.NumberColumn("Precio (USD)", format="$%.4f", width="small"),
+                        "target": st.column_config.NumberColumn("Target (Bs)", format="%.2f Bs", width="small"),
+                        "upside": st.column_config.NumberColumn("Upside", format="+%.2f%%", width="small")
                     }
                 )
                 
