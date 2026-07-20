@@ -360,17 +360,17 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
     if num_subpaneles == 1:
         fig = make_subplots(
             rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-            subplot_titles=('PRECIO', subpaneles[0]), row_width=[0.25, 0.75]
+            subplot_titles=('PRECIO', subpaneles[0]), row_width=[0.20, 0.80]
         )
     elif num_subpaneles >= 2:
         fig = make_subplots(
             rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-            subplot_titles=('PRECIO', subpaneles[0], subpaneles[1]), row_width=[0.20, 0.20, 0.60]
+            subplot_titles=('PRECIO', subpaneles[0], subpaneles[1]), row_width=[0.15, 0.15, 0.70]
         )
     else:
         fig = make_subplots(
             rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, 
-            subplot_titles=('PRECIO', 'VOLUMEN'), row_width=[0.25, 0.75]
+            subplot_titles=('PRECIO', 'VOLUMEN'), row_width=[0.20, 0.80]
         )
 
     fig.add_trace(go.Candlestick(
@@ -422,7 +422,7 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad, indicadores_selecc
         fila_actual += 1
 
     fig.update_layout(
-        height=720, 
+        height=850, 
         paper_bgcolor='#0b1120',
         plot_bgcolor='#0b1120',
         xaxis_rangeslider_visible=False,
