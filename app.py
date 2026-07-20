@@ -558,7 +558,12 @@ if st.sidebar.button("🔄 Actualizar Historial BVC", use_container_width=True):
             st.sidebar.error(f"Error: {e}")
 
 st.sidebar.divider()
-btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary")
+
+# Corrección estructural del botón: Se usa una callback o control directo por estado para evitar que se pierda la ejecución
+def ejecutar_analisis():
+    st.session_state['analizado'] = True
+
+btn_analizar = st.sidebar.button("🔍 Analizar Mercado", use_container_width=True, type="primary", on_click=ejecutar_analisis)
 
 col_titulo, col_dolar = st.columns([2, 1])
 
@@ -582,7 +587,7 @@ with col_dolar:
 
 carpeta = "./datos_bvc"
 
-if btn_analizar:
+if st.session_state['analizado']:
     if not os.path.exists(carpeta):
         st.error("⚠️ La carpeta de datos aún no existe. Presiona 'Actualizar Historial BVC'.")
     else:
@@ -600,9 +605,8 @@ if btn_analizar:
 
             if resultados:
                 st.session_state['resultados'] = resultados
-                st.session_state['analizado'] = True
 
-if st.session_state.get('analizado', False):
+if st.session_state['analizado'] and st.session_state['resultados']:
     resultados = st.session_state['resultados']
     df_resultados = pd.DataFrame(resultados)
     
