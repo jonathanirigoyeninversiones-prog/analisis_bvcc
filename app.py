@@ -661,6 +661,7 @@ if st.session_state.get('analizado', False):
                 df_display[columnas], 
                 use_container_width=True, 
                 hide_index=True,
+                height=min(450, (len(df) + 1) * 35 + 10),
                 selection_mode="single-row",
                 on_select="rerun",
                 key=clave_tabla,
