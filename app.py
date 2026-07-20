@@ -93,7 +93,7 @@ def cambiar_temporalidad(df, temporalidad):
     return df_resampled
 
 # -------------------------------------------------------------------
-# 2. CÁLCULO DE INDICADORES SOBRE LOS CSV (INCLUYE MACD)
+# 2. CÁLCULO DE INDICADORES SOBRE LOS CSV
 # -------------------------------------------------------------------
 def calcular_indicadores(df):
     df = df.sort_values('Date').reset_index(drop=True)
@@ -127,7 +127,7 @@ def calcular_indicadores(df):
 
     df['Vol_MA20'] = df['Volume'].rolling(20).mean()
 
-    # --- CÁLCULO DEL MACD (12, 26, 9) ---
+    # MACD (12, 26, 9)
     ema12 = df['Close'].ewm(span=12, adjust=False).mean()
     ema26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = ema12 - ema26
@@ -144,40 +144,40 @@ def calcular_indicadores(df):
     return df
 
 # -------------------------------------------------------------------
-# 3. GENERAR GRÁFICA INTERACTIVA DE 4 NIVELES
+# 3. GENERAR GRÁFICA INTERACTIVA SIN LEYENDAS INNECESARIAS
 # -------------------------------------------------------------------
 def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
     df_plot = df.tail(120).copy()
 
-    # 4 Pisos: Precio (50%), Volumen (15%), RSI (17.5%), MACD (17.5%)
+    # Títulos limpios de cada subgráfico
     fig = make_subplots(
         rows=4, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.03, 
-        subplot_titles=(f'Evolución de Precio ({temporalidad}) - {nombre_empresa}', 'Volumen', 'RSI (14)', 'MACD (12, 26, 9)'),
+        subplot_titles=(f'{nombre_empresa} ({temporalidad})', 'Volumen', 'RSI', 'MACD'),
         row_width=[0.175, 0.175, 0.15, 0.50]
     )
 
     # 1. Velas Japonesas
     fig.add_trace(go.Candlestick(
         x=df_plot['Date'], open=df_plot['Open'], high=df_plot['High'], low=df_plot['Low'], close=df_plot['Close'],
-        name='Precio (Bs)',
+        name='Precio',
         increasing_line_color='#22c55e', decreasing_line_color='#ef4444',
         increasing_fillcolor='#22c55e', decreasing_fillcolor='#ef4444'
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA30'], line=dict(color='#38bdf8', width=1.5), name='EMA 30'), row=1, col=1)
     fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['EMA60'], line=dict(color='#f43f5e', width=1.5), name='EMA 60'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Sup'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='Bollinger Inf'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_upper'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='BB Sup'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['BB_lower'], line=dict(color='rgba(255,255,255,0.25)', width=1, dash='dash'), name='BB Inf'), row=1, col=1)
 
-    # 2. Volumen con Área Gris 30% Opacidad y MA 20
+    # 2. Volumen
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Volume'],
         fill='tozeroy',
         fillcolor='rgba(128, 128, 128, 0.3)',
         line=dict(color='rgba(128, 128, 128, 0.5)', width=1),
-        name='Área Volumen'
+        name='Área Vol'
     ), row=2, col=1)
 
     colores_volumen = np.where(df_plot['Close'] >= df_plot['Open'], '#22c55e', '#ef4444')
@@ -188,24 +188,24 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['Vol_MA20'],
-        line=dict(color='#f59e0b', width=1.5), name='Vol MA 20'
+        line=dict(color='#f59e0b', width=1.5), name='Vol MA20'
     ), row=2, col=1)
 
-    # 3. RSI Amarillo Suavizado
+    # 3. RSI
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['RSI'],
         line=dict(color='#facc15', width=2, shape='spline'),
-        name='RSI 14'
+        name='RSI'
     ), row=3, col=1)
     
     fig.add_hline(y=70, line_dash="dash", row=3, col=1, line_color="#ef4444", line_width=1)
     fig.add_hline(y=30, line_dash="dash", row=3, col=1, line_color="#22c55e", line_width=1)
 
-    # 4. MACD DEBAJO DEL RSI
+    # 4. MACD
     colores_hist = np.where(df_plot['MACD_Hist'] >= 0, '#22c55e', '#ef4444')
     fig.add_trace(go.Bar(
         x=df_plot['Date'], y=df_plot['MACD_Hist'],
-        marker_color=colores_hist, name='Histograma MACD', opacity=0.6
+        marker_color=colores_hist, name='Hist', opacity=0.6
     ), row=4, col=1)
 
     fig.add_trace(go.Scatter(
@@ -215,22 +215,22 @@ def generar_grafico_tecnico(df, nombre_empresa, temporalidad):
 
     fig.add_trace(go.Scatter(
         x=df_plot['Date'], y=df_plot['MACD_Signal'],
-        line=dict(color='#f97316', width=1.5), name='Señal'
+        line=dict(color='#f97316', width=1.5), name='Signal'
     ), row=4, col=1)
 
+    # DESACTIVAMOS showlegend PARA QUITAR TODA LA LEYENDA SUPERIOR AMONTONADA
     fig.update_layout(
         height=820, 
         template='plotly_dark', 
         xaxis_rangeslider_visible=False,
-        margin=dict(l=20, r=20, t=40, b=20),
+        margin=dict(l=20, r=20, t=30, b=20),
         hovermode='x unified',
         dragmode='pan',
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        showlegend=False
     )
     
-    fig.update_yaxes(title_text="Precio (Bs)", row=1, col=1)
-    fig.update_yaxes(title_text="Volumen", row=2, col=1)
+    fig.update_yaxes(title_text="Bs", row=1, col=1)
+    fig.update_yaxes(title_text="Vol", row=2, col=1)
     fig.update_yaxes(title_text="RSI", range=[10, 90], row=3, col=1)
     fig.update_yaxes(title_text="MACD", row=4, col=1)
     
@@ -362,7 +362,7 @@ def mostrar_modal_grafico(datos_empresa):
     st.plotly_chart(
         fig, 
         use_container_width=True, 
-        config={'scrollZoom': True, 'displayModeBar': True}
+        config={'scrollZoom': True, 'displayModeBar': False}
     )
 
 # -------------------------------------------------------------------
